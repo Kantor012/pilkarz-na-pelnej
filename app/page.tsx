@@ -606,7 +606,7 @@ export default function Home() {
         <section className="hero">
           <div className="hero-copy">
             <p className="kicker">SZYBKA KARIERA • PEŁNA KONFIGURACJA • ZERO ŚCIEMY</p>
-            <h1>TY USTALASZ,<br /><em>KIM BĘDZIESZ.</em></h1>
+            <h1><span>TY USTALASZ,</span><em>KIM BĘDZIESZ.</em></h1>
             <p className="lead">Zbuduj zawodnika od podeszwy korka po ego. Każdy wybór zmienia liczby, trening i to, co wydarzy się na boisku.</p>
             <div className="promise-row"><span>✓ OVR od 34 do 65</span><span>✓ 6 stylów gry</span><span>✓ ukryty talent</span></div>
             <div className="wide-screen-note"><b>TWÓJ PROFIL</b><span>{position}</span><span>{style}</span><span>{selectedLevel.label}</span><span>{difficulty}</span></div>
@@ -634,7 +634,7 @@ export default function Home() {
                 <label>Pierwszy klub<select value={club} onChange={(event) => setClub(event.target.value)}>{CLUBS.map((item) => <option key={item.name}>{item.name}</option>)}</select><small className="field-note">{selectedClub.path} • baza treningowa ×{selectedClub.facilities.toFixed(2)} • {selectedClub.salary} zł/mies.</small></label>
                 <label>Charakter<select value={personality} onChange={(event) => setPersonality(event.target.value as keyof typeof PERSONALITIES)}>{Object.entries(PERSONALITIES).map(([key, item]) => <option key={key} value={key}>{item.label}</option>)}</select><small className="field-note">{selectedPersonality.copy} • profesjonalizm {selectedPersonality.professionalism}</small></label>
                 <label>Poziom trudności<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as Difficulty)}><option>Niedzielny</option><option>Normalny</option><option>Bez litości</option></select><small className="field-note">{DIFFICULTIES[difficulty].copy}</small></label>
-                <label>Talent treningowy<select value={hiddenMode} onChange={(event) => setHiddenMode(event.target.value)}><option value="mystery">Ukryty losowy — odkryję w grze</option><option value="touch">Złoty dotyk — jawny</option><option value="engine">Silnik z diesla — jawny</option><option value="vision">Skaner boiska — jawny</option><option value="killer">Instynkt killera — jawny</option><option value="worker">Pracoholik — jawny</option><option value="none">Bez bonusu — tryb purysty</option></select><small className="field-note">{hiddenMode === "mystery" ? "Bonus działa od początku, ale ujawni się po 3 treningach." : HIDDEN_TALENTS[hiddenMode as HiddenTalent].copy}</small></label>
+                <label>Talent treningowy<select value={hiddenMode} onChange={(event) => setHiddenMode(event.target.value)}><option value="mystery">Ukryty losowy</option><option value="touch">Złoty dotyk — jawny</option><option value="engine">Silnik z diesla — jawny</option><option value="vision">Skaner boiska — jawny</option><option value="killer">Instynkt killera — jawny</option><option value="worker">Pracoholik — jawny</option><option value="none">Bez bonusu — tryb purysty</option></select><small className="field-note">{hiddenMode === "mystery" ? "Bonus działa od początku, ale ujawni się po 3 treningach." : HIDDEN_TALENTS[hiddenMode as HiddenTalent].copy}</small></label>
 
                 <div className="setup-summary">
                   <div className="summary-ovr"><span>STARTOWY OVR</span><strong>{ovr(previewPlayer).toFixed(1)}</strong><small>Potencjał {selectedLevel.potential}</small></div>
