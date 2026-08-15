@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 type Position = "Napastnik" | "Pomocnik" | "Obrońca" | "Bramkarz";
 type AttrKey =
@@ -192,6 +192,7 @@ function MiniGame({ action, player, onResolve }: { action: MatchAction; player: 
   const [preview, setPreview] = useState(true);
   const [inputs, setInputs] = useState<string[]>([]);
   const [reaction, setReaction] = useState<"wait" | "go" | "done">("wait");
+  const [selectedLane, setSelectedLane] = useState<number | null>(null);
   const done = useRef(false);
   const startedAt = useRef(0);
   const correctLane = action.id % 3;
@@ -228,10 +229,16 @@ function MiniGame({ action, player, onResolve }: { action: MatchAction; player: 
   }, [action.kind]);
 
   useEffect(() => {
-    if (action.kind === "choice" || action.kind === "sequence") {
-      const timer = window.setTimeout(() => setPreview(false), 1350);
-      return () => window.clearTimeout(timer);
-    }
+    if (action.kind !== "sequence") return;
+    const timer = window.setTimeout(() => setPreview(false), 1350);
+    return () => window.clearTimeout(timer);
+  }, [action.kind]);
+
+  useEffect(() => {
+    if (action.kind !== "choice") return;
+    const startFlight = window.setTimeout(() => setPreview(false), 700);
+    const missedBall = window.setTimeout(() => resolveOnce(false), 2350);
+    return () => { window.clearTimeout(startFlight); window.clearTimeout(missedBall); };
   }, [action.kind]);
 
   useEffect(() => {
@@ -251,6 +258,11 @@ function MiniGame({ action, player, onResolve }: { action: MatchAction; player: 
     const index = next.length - 1;
     if (arrows[index] !== arrow) resolveOnce(false);
     else if (next.length === arrows.length) resolveOnce(true);
+  };
+  const chooseLane = (index: number) => {
+    if (preview || selectedLane !== null) return;
+    setSelectedLane(index);
+    window.setTimeout(() => resolveOnce(index === correctLane), 520);
   };
 
   return (
@@ -273,10 +285,41 @@ function MiniGame({ action, player, onResolve }: { action: MatchAction; player: 
 
       {action.kind === "choice" && (
         <div className="choice-game">
-          <p className="instruction">{preview ? "ZAPAMIĘTAJ WOLNY KIERUNEK" : "TERAZ WYBIERAJ"}</p>
+          <p className="instruction">
+            {player.position === "Bramkarz"
+              ? preview ? "NAPASTNIK NABIEGA — PATRZ NA PIŁKĘ" : "PIŁKA LECI — RZUĆ SIĘ PRZED UDERZENIEM W SIATKĘ"
+              : preview ? "ZAWODNICY RUSZAJĄ — CZYTAJ BOISKO" : "ZAGRAJ DO WOLNEGO PARTNERA, ZANIM ZAMKNĄ LINIĘ"}
+          </p>
+          <div
+            className={`choice-arena ${player.position === "Bramkarz" ? "goal-arena" : "pass-arena"} ${preview ? "setup" : "live"} ${selectedLane !== null ? "committed" : ""}`}
+            style={{
+              "--target-x": `${[14, 50, 86][correctLane]}%`,
+              "--player-x": `${selectedLane === null ? 50 : [14, 50, 86][selectedLane]}%`,
+            } as CSSProperties}
+          >
+            {player.position === "Bramkarz" ? (
+              <>
+                <div className="goal-frame"><i /><i /><i /></div>
+                <div className="keeper-token"><b>1</b><span /></div>
+                <div className="shooter-token"><b>9</b></div>
+                <div className="choice-ball" />
+              </>
+            ) : (
+              <>
+                <div className="halfway-line" />
+                <div className="passer-token">TY</div>
+                {[0, 1, 2].map((lane) => (
+                  <div key={lane} className={`runner-token lane-${lane} ${lane === correctLane ? "free-runner" : "covered-runner"}`}>
+                    <b>{lane === correctLane ? "8" : "X"}</b><small>{lane === correctLane ? "WOLNY" : "KRYTY"}</small>
+                  </div>
+                ))}
+                <div className="pass-ball" />
+              </>
+            )}
+          </div>
           <div className="lane-grid">
             {["LEWO", "ŚRODEK", "PRAWO"].map((label, index) => (
-              <button key={label} disabled={preview} className={`lane ${preview && correctLane === index ? "open" : ""}`} onClick={() => resolveOnce(index === correctLane)}>
+              <button key={label} disabled={preview || selectedLane !== null} className={`lane ${selectedLane === index ? "chosen" : ""}`} onClick={() => chooseLane(index)}>
                 <span>{index === 0 ? "↙" : index === 1 ? "↓" : "↘"}</span>{label}
               </button>
             ))}
