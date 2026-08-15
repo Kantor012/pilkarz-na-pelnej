@@ -9,6 +9,19 @@ export interface NationalTeamState { country: CountryCode; strength: number; cal
 export interface InternationalTournamentState { active: boolean; groups: CountryCode[][]; groupPoints: Partial<Record<CountryCode, number>>; phase: "inactive" | "groups" | "semifinal" | "final" | "finished"; knockout: Array<{ home: CountryCode; away: CountryCode; homeGoals?: number; awayGoals?: number }>; champion: CountryCode | null }
 export interface CompetitionsState { season: number; cups: Record<CountryCode, CupState>; europe: EuropeState; nationalTeams: NationalTeamState[]; internationalTournament: InternationalTournamentState }
 
+const ROUND_LABELS: Record<CupState["round"] | EuropeState["round"] | InternationalTournamentState["phase"], string> = {
+  preliminary: "RUNDA WSTĘPNA",
+  groups: "FAZA GRUPOWA",
+  round32: "1/16 FINAŁU",
+  round16: "1/8 FINAŁU",
+  quarterfinal: "ĆWIERĆFINAŁ",
+  semifinal: "PÓŁFINAŁ",
+  final: "FINAŁ",
+  finished: "ZAKOŃCZONE",
+  inactive: "NIEAKTYWNE",
+};
+export const competitionRoundLabel = (round: keyof typeof ROUND_LABELS) => ROUND_LABELS[round];
+
 const CODES: CountryCode[] = ["PL", "DE", "IT", "NL", "FR", "EN", "PT", "ES"];
 const CUP_WEEKS = [3, 7, 11, 17, 23, 29];
 const EUROPE_WEEKS = [4, 8, 12, 16, 20, 24, 28];
@@ -86,12 +99,12 @@ export function getPlayerCompetitionFixture(state: CompetitionsState, clubId: st
       }
     } else {
       const tie = state.europe.knockout.find((item) => !item.played && (item.homeId === clubId || item.awayId === clubId));
-      if (tie) return { kind: "europe", fixtureId: tie.id, opponentId: tie.homeId === clubId ? tie.awayId : tie.homeId, label: `Europa • ${state.europe.round}` };
+      if (tie) return { kind: "europe", fixtureId: tie.id, opponentId: tie.homeId === clubId ? tie.awayId : tie.homeId, label: `Europa • ${competitionRoundLabel(state.europe.round)}` };
     }
   }
   if (CUP_WEEKS.includes(week)) {
     const tie = state.cups[country].ties.find((item) => !item.played && (item.homeId === clubId || item.awayId === clubId));
-    if (tie) return { kind: "cup", fixtureId: tie.id, opponentId: tie.homeId === clubId ? tie.awayId : tie.homeId, label: `Puchar kraju • ${state.cups[country].round}` };
+    if (tie) return { kind: "cup", fixtureId: tie.id, opponentId: tie.homeId === clubId ? tie.awayId : tie.homeId, label: `Puchar kraju • ${competitionRoundLabel(state.cups[country].round)}` };
   }
   return null;
 }

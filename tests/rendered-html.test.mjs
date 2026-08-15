@@ -246,9 +246,11 @@ test("contracts settle money, negotiate safely and loans return to parent club",
 
 test("cups, Europe and national teams use the complete world", async () => {
   const { createWorld } = await gameModule("/game/world.ts");
-  const { createCompetitions, advanceCup, advanceCompetitionsWeek, updateCallUp } = await gameModule("/game/competitions.ts");
+  const { createCompetitions, advanceCup, advanceCompetitionsWeek, competitionRoundLabel, updateCallUp } = await gameModule("/game/competitions.ts");
   const world = createWorld(9090);
   let competitions = createCompetitions(world, "PL", 72);
+  assert.equal(competitionRoundLabel(competitions.cups.PL.round), "RUNDA WSTĘPNA");
+  assert.equal(competitionRoundLabel(competitions.europe.round), "FAZA GRUPOWA");
   assert.equal(Object.keys(competitions.cups).length, 8);
   assert.equal(competitions.cups.PL.ties.length, 16);
   assert.equal(competitions.europe.groups.length, 8);
