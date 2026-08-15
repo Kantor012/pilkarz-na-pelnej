@@ -858,3 +858,39 @@ body { background:#071019; }
   .career-console .intensity-picker button { min-width:52px; }
   .career-console .training-grid { height:auto; grid-template-columns:1fr; grid-template-rows:none; }
 }
+
+/* TRAINING FIT — HEADER AND CARDS SHARE THE REAL AVAILABLE HEIGHT */
+.career-console .training-section.focused-section { display:flex; flex-direction:column; }
+.career-console .training-section-title { flex:0 0 auto; }
+.career-console .training-grid { flex:1 1 auto; min-height:0; height:auto; }
+.career-console .training-card { min-height:0; overflow:hidden; }
+.career-console .training-card>p { min-height:0; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.career-console .training-effects { align-self:end; gap:4px; }
+.career-console .training-effects b,.career-console .training-effects em { padding:4px 6px; font-size:6.5px; line-height:1.15; }
+
+@media (min-width:1181px) and (max-height:850px) {
+  .career-console .training-section.focused-section { padding:14px; }
+  .career-console .training-section-title { margin-bottom:9px; }
+  .career-console .training-section-title h3 { margin-top:3px; font-size:16px; }
+  .career-console .training-card { gap:5px; padding:10px; }
+  .career-console .training-icon { flex-basis:34px; width:34px; height:34px; font-size:14px; }
+  .career-console .training-card-top { gap:8px; }
+  .career-console .training-card-top strong { font-size:10px; }
+  .career-console .training-card-top small { font-size:6.5px; }
+  .career-console .training-card>p { margin-bottom:2px; -webkit-line-clamp:1; font-size:7.5px; }
+  .career-console .training-ovr-impact { padding:3px 5px; font-size:6px; }
+  .career-console .training-effects b,.career-console .training-effects em { padding:3px 5px; font-size:6px; }
+}
+
+@media (max-width:1180px) and (min-width:761px) {
+  .career-console .training-card { gap:4px; padding:8px; }
+  .career-console .training-card-top { gap:7px; }
+  .career-console .training-card-top strong { font-size:9px; }
+  .career-console .training-ovr-impact { padding:3px 5px; font-size:5.5px; }
+  .career-console .training-effects b,.career-console .training-effects em { padding:3px 4px; font-size:5.5px; }
+}
+
+@media (max-width:760px) {
+  .career-console .training-grid { flex:none; }
+  .career-console .training-card { min-height:180px; }
+}
