@@ -193,6 +193,9 @@ function event(id: string, minute: number, type: MatchEvent["type"], side: Match
   return { id, minute, type, side, text };
 }
 
+const SHOT_CHANCE_BY_ZONE = [0.045, 0.075, 0.14, 0.24, 0.38];
+const SHOT_CONVERSION_BY_ZONE = [0.03, 0.048, 0.083, 0.135, 0.22];
+
 function simulateMinute(state: MatchSimulationState, minute: number) {
   let rngState = state.rngState;
   let possession = state.possession;
@@ -211,15 +214,25 @@ function simulateMinute(state: MatchSimulationState, minute: number) {
   }
   const attackStrength = possession === "home" ? state.playerClub.strength : state.opponent.strength;
   const defenseStrength = possession === "home" ? state.opponent.strength : state.playerClub.strength;
-  const goalRoll = nextRandom(rngState); rngState = goalRoll.state;
-  const goalChance = clamp(0.006 + (attackStrength - defenseStrength) * 0.00045 + (zone === 4 ? 0.009 : 0), 0.002, 0.025);
-  if (goalRoll.value < goalChance) {
-    if (possession === "home") scoreHome += 1; else scoreAway += 1;
-    events.unshift(event(`goal-${minute}-${rngState}`, minute, "goal", possession, `${minute}′ GOL! ${possession === "home" ? state.playerClub.name : state.opponent.name} kończy akcję bez pytania cię o zgodę.`));
-    possession = possession === "home" ? "away" : "home";
-    zone = 2;
-  } else if (zone === 4 && goalRoll.value < goalChance + 0.045 && events.length < 80) {
-    events.unshift(event(`shot-${minute}-${rngState}`, minute, "shot", possession, `${minute}′ Strzał, ale piłka wybiera bezpieczniejszą przyszłość obok bramki.`));
+  const strengthEdge = attackStrength - defenseStrength;
+  const shotRoll = nextRandom(rngState); rngState = shotRoll.state;
+  const shotChance = clamp(SHOT_CHANCE_BY_ZONE[zone] + strengthEdge * 0.0012, 0.025, 0.52);
+  if (shotRoll.value < shotChance) {
+    const goalRoll = nextRandom(rngState); rngState = goalRoll.state;
+    const conversionChance = clamp(SHOT_CONVERSION_BY_ZONE[zone] + strengthEdge * 0.002, 0.015, 0.34);
+    if (goalRoll.value < conversionChance) {
+      if (possession === "home") scoreHome += 1; else scoreAway += 1;
+      events.unshift(event(`goal-${minute}-${rngState}`, minute, "goal", possession, `${minute}′ GOL! ${possession === "home" ? state.playerClub.name : state.opponent.name} kończy akcję bez pytania cię o zgodę.`));
+      possession = possession === "home" ? "away" : "home";
+      zone = 2;
+    } else if (events.length < 80) {
+      const missText = goalRoll.value < conversionChance + 0.28
+        ? "Bramkarz odbija piłkę i pretensje obrony."
+        : goalRoll.value < conversionChance + 0.58
+          ? "Obrońca blokuje strzał częścią ciała, której nie zgłaszał do ubezpieczenia."
+          : "Piłka mija słupek i trafia w sektor dla optymistów.";
+      events.unshift(event(`shot-${minute}-${rngState}`, minute, "shot", possession, `${minute}′ Strzał! ${missText}`));
+    }
   }
   const spatial = spatialSnapshot({ ...state, possession, zone }, minute);
   return { ...state, rngState, minute, possession, zone, scoreHome, scoreAway, events: events.slice(0, 80), ...spatial };

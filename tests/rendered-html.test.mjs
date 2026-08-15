@@ -102,6 +102,34 @@ test("engine permits zero opportunities and never exceeds seven", async () => {
   assert.ok(Math.max(...counts) <= 7);
 });
 
+test("ambient match simulation creates goals and chances for both teams", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { advanceMatch, createMatch } = await gameModule("/game/match-engine.ts");
+  const world = createWorld(77);
+  const club = world.clubs["PL-3-01"];
+  const opponent = world.clubs["PL-3-02"];
+  const attrs = { technika: 58, strzal: 54, podania: 62, drybling: 57, odbior: 52, szybkosc: 59, sila: 53, kondycja: 61, refleks: 70 };
+  let homeGoals = 0;
+  let awayGoals = 0;
+  let scoreless = 0;
+  let nonGoalShots = 0;
+  const samples = 1200;
+  for (let seed = 1; seed <= samples; seed += 1) {
+    const created = createMatch({ playerName: "Test", playerNumber: 1, position: "Bramkarz", attrs, playerOvr: 60, energy: 78, morale: 70, managerTrust: 65, teamStrength: club.strength, playerClub: club, opponent }, seed);
+    const match = advanceMatch({ ...created, opportunities: [] }, 90);
+    homeGoals += match.scoreHome;
+    awayGoals += match.scoreAway;
+    if (match.scoreHome + match.scoreAway === 0) scoreless += 1;
+    nonGoalShots += match.events.filter((item) => item.type === "shot").length;
+  }
+  const averageGoals = (homeGoals + awayGoals) / samples;
+  assert.ok(averageGoals >= 2.2 && averageGoals <= 3, `unexpected average goals: ${averageGoals}`);
+  assert.ok(homeGoals / samples > 1.1, "the player's team should score independently of player actions");
+  assert.ok(awayGoals / samples > 1.1, "the opponent should remain dangerous");
+  assert.ok(scoreless / samples < 0.12, "0:0 results should be uncommon");
+  assert.ok(nonGoalShots / samples > 12, "the match feed should contain regular chances");
+});
+
 test("quality strongly changes probability but never reaches certainty", async () => {
   const { createWorld } = await gameModule("/game/world.ts");
   const { createMatch, submitAction } = await gameModule("/game/match-engine.ts");
