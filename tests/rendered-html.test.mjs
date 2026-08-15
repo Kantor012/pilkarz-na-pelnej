@@ -62,6 +62,12 @@ test("same seed and input create an identical deterministic match", async () => 
   assert.ok(first.opportunities.every((opportunity) => opportunity.target.x >= 0 && opportunity.target.x <= 100 && opportunity.target.y >= 0 && opportunity.target.y <= 64));
 });
 
+test("match library covers every promised interactive action family", async () => {
+  const { availableActionTypes } = await gameModule("/game/match-engine.ts");
+  const available = new Set(availableActionTypes());
+  for (const action of ["przyjęcie", "podanie", "podanie prostopadłe", "drybling", "dośrodkowanie", "strzał", "główka", "odbiór", "przechwyt", "krycie", "parada", "wyjście do piłki", "wznowienie"]) assert.ok(available.has(action), `missing ${action}`);
+});
+
 test("engine permits zero opportunities and never exceeds seven", async () => {
   const { createWorld } = await gameModule("/game/world.ts");
   const { createMatch } = await gameModule("/game/match-engine.ts");
@@ -91,6 +97,47 @@ test("quality strongly changes probability but never reaches certainty", async (
   assert.ok(excellent.chance >= 86 && excellent.chance <= 98.5);
   assert.ok(poor.chance >= 1 && poor.chance <= 22);
   assert.ok(excellent.chance > poor.chance);
+});
+
+test("Monte Carlo 10000 confirms quality and OVR advantage improve outcomes", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { createMatch, submitAction } = await gameModule("/game/match-engine.ts");
+  const world = createWorld(5150); const club = world.clubs["PL-3-01"]; const opponent = world.clubs["PL-3-02"];
+  const attrs = { technika: 70, strzal: 70, podania: 70, drybling: 70, odbior: 70, szybkosc: 70, sila: 70, kondycja: 70, refleks: 70 };
+  let match; for (let seed = 1; seed < 100 && !match?.opportunities.length; seed += 1) match = createMatch({ playerName:"MC",playerNumber:8,position:"Pomocnik",attrs,playerOvr:70,energy:80,morale:75,managerTrust:80,teamStrength:club.strength,playerClub:club,opponent },seed);
+  const opportunity = match.opportunities[0]; const ready = { ...match, phase:"opportunity", currentOpportunity:opportunity };
+  let excellent = 0; let poor = 0; let advantage = 0; let disadvantage = 0;
+  for (let seed = 1; seed <= 10000; seed += 1) {
+    const rngState = (seed * 2654435761) >>> 0;
+    excellent += submitAction({ ...ready, rngState },opportunity.id,92).resolved.success ? 1 : 0;
+    poor += submitAction({ ...ready, rngState },opportunity.id,20).resolved.success ? 1 : 0;
+    advantage += submitAction({ ...ready, rngState, playerOvr:82, playerAttrs:{...attrs,podania:84} },opportunity.id,70).resolved.success ? 1 : 0;
+    disadvantage += submitAction({ ...ready, rngState, playerOvr:42, playerAttrs:{...attrs,podania:38} },opportunity.id,70).resolved.success ? 1 : 0;
+  }
+  assert.ok(excellent > poor * 3);
+  assert.ok(advantage > disadvantage);
+  assert.ok(excellent < 10000);
+});
+
+test("full match remains in pitch bounds and JSON reload preserves RNG outcome", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { createMatch, advanceMatch, submitAction, continueAfterAction } = await gameModule("/game/match-engine.ts");
+  const world = createWorld(6161); const club = world.clubs["PL-3-01"]; const opponent = world.clubs["PL-3-02"];
+  const attrs = { technika: 60, strzal: 60, podania: 60, drybling: 60, odbior: 60, szybkosc: 60, sila: 60, kondycja: 60, refleks: 60 };
+  let state = createMatch({ playerName:"Reload",playerNumber:8,position:"Pomocnik",attrs,playerOvr:60,energy:75,morale:70,managerTrust:65,teamStrength:club.strength,playerClub:club,opponent },999);
+  let guard = 0;
+  while (state.phase !== "finished" && guard < 200) {
+    if (state.phase === "opportunity") {
+      const restored = JSON.parse(JSON.stringify(state));
+      assert.deepEqual(submitAction(state,state.currentOpportunity.id,81), submitAction(restored,restored.currentOpportunity.id,81));
+      state = submitAction(state,state.currentOpportunity.id,81);
+    } else if (state.phase === "resolved") state = continueAfterAction(state);
+    else state = advanceMatch(state,1);
+    assert.ok(state.players.every((player) => player.x >= 0 && player.x <= 100 && player.y >= 0 && player.y <= 64));
+    if (state.ball.ownerId) assert.equal(state.players.find((player) => player.id === state.ball.ownerId).side,state.possession);
+    guard += 1;
+  }
+  assert.equal(state.phase,"finished");
 });
 
 test("a complete world round advances tables consistently", async () => {
@@ -165,20 +212,36 @@ test("microcycle has diminishing returns, three slots and dynamic traits", async
   assert.ok(aged.szybkosc < attrs.szybkosc);
 });
 
-test("contracts settle money and transfers really change club terms", async () => {
+test("contracts settle money, negotiate safely and loans return to parent club", async () => {
   const { createWorld } = await gameModule("/game/world.ts");
-  const { createMarketState, generateTransferOffers, acceptTransfer, settleCareerWeek } = await gameModule("/game/career-market.ts");
+  const { createMarketState, generateTransferOffers, negotiateOffer, acceptTransfer, prepareWeeklyDecision, resolveWeeklyDecision, resolveContractSeason, settleCareerWeek } = await gameModule("/game/career-market.ts");
   const world = createWorld(8080);
   let market = createMarketState("PL-3-01", 1, 58, 8080);
   market = settleCareerWeek(market, { season: 1, week: 1, appeared: true, goals: 2, rating: 8, won: true });
   assert.ok(market.ledger[0].amountEur > market.contract.weeklySalaryEur);
+  assert.equal(market.objectives.find((objective) => objective.id === "appearances").progress,1);
   for (let seed = 1; seed < 50 && !market.offers.length; seed += 1) market = generateTransferOffers(world, market, { season: 1, week: 15, age: 20, ovr: 58, potential: 84, form: 75, position: "Pomocnik", currentClubId: "PL-3-01" }, seed);
   assert.ok(market.offers.length > 0);
   const offer = market.offers[0];
-  const transferred = acceptTransfer(market, offer, 1, 15);
+  const negotiated = negotiateOffer(market, offer.id);
+  assert.ok(negotiated.offers[0].salaryEur > offer.salaryEur);
+  const transferred = acceptTransfer(negotiated, negotiated.offers[0], 1, 15);
   assert.equal(transferred.contract.clubId, offer.clubId);
   assert.equal(transferred.offers.length, 0);
   assert.ok(transferred.ledger[0].amountEur > 0);
+  const loaned = acceptTransfer(market, { ...offer, kind:"loan", negotiationRound:0 }, 1, 15);
+  assert.equal(loaned.contract.loanFromClubId, market.contract.clubId);
+  assert.equal(loaned.contract.endSeason, 2);
+  const returned = resolveContractSeason(loaned, 2);
+  assert.equal(returned.clubId, market.contract.clubId);
+  assert.equal(returned.market.contract.loanFromClubId, undefined);
+  const legacyOfferMarket = { ...market, offers: [{ ...offer, negotiationRound: undefined }] };
+  assert.equal(negotiateOffer(legacyOfferMarket, offer.id).offers[0].negotiationRound, 1);
+  const decisionMarket = prepareWeeklyDecision({ ...market, weeklyDecision:null },1,4,8080);
+  assert.ok(decisionMarket.weeklyDecision);
+  const decision = resolveWeeklyDecision(decisionMarket,decisionMarket.weeklyDecision.options[0].id,1,4);
+  assert.equal(decision.market.weeklyDecision,null);
+  assert.ok(decision.deltaEur <= 0);
 });
 
 test("cups, Europe and national teams use the complete world", async () => {
@@ -201,9 +264,53 @@ test("cups, Europe and national teams use the complete world", async () => {
   world.season = 2;
   let nextSeason = createCompetitions(world, "PL", 75, competitions);
   assert.ok(nextSeason.europe.groups.flat().includes(finishedCup.winnerId));
-  for (const week of [6,14,22,30]) nextSeason = advanceCompetitionsWeek(nextSeason, world, week);
+  for (const week of [6,14,18,22,30]) nextSeason = advanceCompetitionsWeek(nextSeason, world, week);
   assert.equal(nextSeason.internationalTournament.phase, "finished");
   assert.ok(nextSeason.internationalTournament.champion);
+  const { getPlayerCompetitionFixture, recordPlayerCompetitionResult } = await gameModule("/game/competitions.ts");
+  const freshCompetitions = createCompetitions(world, "PL", 60);
+  const lowerClub = freshCompetitions.cups.PL.ties[0].homeId;
+  const special = getPlayerCompetitionFixture(freshCompetitions, lowerClub, "PL", 3);
+  assert.equal(special.kind, "cup");
+  const recorded = recordPlayerCompetitionResult(freshCompetitions, special, lowerClub, 2, 1);
+  const advancedCupWeek = advanceCompetitionsWeek(recorded, world, 3, lowerClub);
+  assert.equal(advancedCupWeek.cups.PL.round, "round32");
+  assert.ok(advancedCupWeek.cups.PL.ties.flatMap((tie) => [tie.homeId,tie.awayId]).includes(lowerClub));
+  const { getPlayerNationalFixture } = await gameModule("/game/competitions.ts");
+  let called = updateCallUp(createCompetitions(world, "PL", 78), "PL", 78, 85, 1200);
+  const national = getPlayerNationalFixture(called, "PL", 6);
+  assert.equal(national.kind, "national");
+  called = recordPlayerCompetitionResult(called, national, "PL", 2, 0);
+  called = advanceCompetitionsWeek(called, world, 6, undefined, "PL");
+  assert.equal(called.internationalTournament.groupPoints.PL, 3);
+});
+
+test("legacy v2 migration preserves player, attributes, talent, money and statistics", async () => {
+  const { migrateLegacyCareerV2 } = await gameModule("/game/migrations.ts");
+  const attrs = { technika:61,strzal:49,podania:66,drybling:58,odbior:54,szybkosc:60,sila:56,kondycja:62,refleks:75 };
+  const migrated = migrateLegacyCareerV2({ player:{ name:"Mirek Wolej",club:"Betonowianka Betonów",position:"Bramkarz",foot:"Lewa",number:1,attrs,potential:92,style:"Profesor" },age:24,nationality:"PL",season:3,week:11,money:2800,hiddenTalent:"Złoty dotyk",hiddenRevealed:true,trainingCount:8,totals:{matches:47,goals:1,assists:3,saves:129,rating:321.4} });
+  assert.equal(migrated.career.player.name,"Mirek Wolej");
+  assert.deepEqual(migrated.career.player.attrs,attrs);
+  assert.equal(migrated.career.hiddenTalent,"Złoty dotyk");
+  assert.equal(migrated.career.money,2800);
+  assert.deepEqual(migrated.career.totals,{matches:47,goals:1,assists:3,saves:129,rating:321.4});
+  assert.equal(migrated.world.clubs[migrated.career.clubId].name,"Betonowianka Betonów");
+});
+
+test("five-season balance simulation keeps every league structurally valid", async () => {
+  const { createWorld, advanceWorldWeek } = await gameModule("/game/world.ts");
+  let world = createWorld(20260815);
+  const started = performance.now();
+  for (let week = 0; week < 150; week += 1) world = advanceWorldWeek(world, "PL-L3");
+  assert.ok(performance.now() - started < 5000);
+  assert.equal(world.season,6);
+  assert.equal(world.history.length,5);
+  for (const league of Object.values(world.leagues)) {
+    assert.equal(league.clubIds.length,16);
+    assert.equal(new Set(league.clubIds).size,16);
+    assert.equal(league.fixtures.length,240);
+  }
+  assert.equal(new Set(Object.values(world.leagues).flatMap((league) => league.clubIds)).size,384);
 });
 
 test("archive, events, settings and achievements persist as deterministic meta state", async () => {

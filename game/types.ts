@@ -182,6 +182,7 @@ export interface MatchSimulationState {
   playerOvr: number;
   playerPosition: Position;
   playerAttrs: Attributes;
+  playerTraits: string[];
   playerEnergy: number;
   playerMorale: number;
   playerClub: ClubProfile;
@@ -199,6 +200,8 @@ export interface MatchSimulationState {
   rating: number;
   stats: MatchStats;
   events: MatchEvent[];
+  competitionKind?: "league" | "cup" | "europe" | "national";
+  competitionFixtureId?: string;
 }
 
 export interface CreateMatchInput {
@@ -214,6 +217,7 @@ export interface CreateMatchInput {
   playerClub: ClubProfile;
   opponent: ClubProfile;
   forcedRole?: MatchRole;
+  specialTraits?: string[];
 }
 
 export interface SaveGameV3<TCareer = unknown> {

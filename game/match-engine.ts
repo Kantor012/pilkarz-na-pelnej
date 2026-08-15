@@ -38,6 +38,7 @@ const OPPORTUNITY_LIBRARY: Record<Position, OpportunityTemplate[]> = {
     { title: "Bomba pod poprzeczkę", flavor: "Piłka leci tam, gdzie rękawice mają najdalej.", prompt: "Zatrzymaj znacznik w strefie parady", actionType: "parada", kind: "timing", skill: "refleks", effect: "save", failConcedes: true },
   ],
   Obrońca: [
+    { title: "Krycie człowiek w człowieka i reklamę w reklamę", flavor: "Napastnik próbuje zgubić cię ruchem bez piłki.", prompt: "Utrzymaj właściwy dystans", actionType: "krycie", kind: "sequence", skill: "odbior", effect: "tackle", failConcedes: true },
     { title: "Wślizg ostatniej faktury", flavor: "Napastnik wychodzi na czystą pozycję.", prompt: "Traf w moment odbioru", actionType: "odbiór", kind: "timing", skill: "odbior", effect: "tackle", failConcedes: true },
     { title: "Piłka między liniami", flavor: "Przechwyć ją, zanim komentator powie „ale przestrzeń”.", prompt: "Zareaguj na podanie", actionType: "przechwyt", kind: "reaction", skill: "refleks", effect: "tackle", failConcedes: false },
     { title: "Wyprowadzenie bez instrukcji", flavor: "Pressing rywala pachnie kłopotami i energetykiem.", prompt: "Powtórz sekwencję wyjścia", actionType: "wyprowadzenie", kind: "sequence", skill: "technika", effect: "progression", failConcedes: true },
@@ -45,6 +46,7 @@ const OPPORTUNITY_LIBRARY: Record<Position, OpportunityTemplate[]> = {
     { title: "Podanie rozpoczynające kontrę", flavor: "Skrzydłowy ruszył. Sam jest tym zaskoczony.", prompt: "Wybierz linię podania", actionType: "podanie", kind: "choice", skill: "podania", effect: "assist", failConcedes: false },
   ],
   Pomocnik: [
+    { title: "Przyjęcie pod kontrolą urzędu", flavor: "Piłka leci mocno, rywal jeszcze mocniej.", prompt: "Zamortyzuj pierwszy kontakt", actionType: "przyjęcie", kind: "timing", skill: "technika", effect: "progression", failConcedes: false },
     { title: "Podanie przez urząd skarbowy", flavor: "Wąski korytarz, duża odpowiedzialność.", prompt: "Wybierz właściwą linię", actionType: "podanie prostopadłe", kind: "choice", skill: "podania", effect: "assist", failConcedes: false },
     { title: "Drybling przez korek", flavor: "Dwóch rywali, jedna piłka i zero planu B.", prompt: "Powtórz sekwencję zwodów", actionType: "drybling", kind: "sequence", skill: "drybling", effect: "progression", failConcedes: false },
     { title: "Strzał z drugiej linii", flavor: "Trener krzyczy „nie strzelaj”, czyli wiadomo co robić.", prompt: "Złap idealny moment", actionType: "strzał", kind: "timing", skill: "strzal", effect: "goal", failConcedes: false },
@@ -59,6 +61,10 @@ const OPPORTUNITY_LIBRARY: Record<Position, OpportunityTemplate[]> = {
     { title: "Główka z piątego piętra", flavor: "Dośrodkowanie leci wysoko, obrońca jeszcze wyżej podnosi łokieć.", prompt: "Złap moment wyskoku", actionType: "główka", kind: "timing", skill: "sila", effect: "goal", failConcedes: false },
   ],
 };
+
+export function availableActionTypes() {
+  return [...new Set(Object.values(OPPORTUNITY_LIBRARY).flat().map((opportunity) => opportunity.actionType))];
+}
 
 const FORMATION: Array<{ x: number; y: number; role: string; number: number }> = [
   { x: 7, y: 32, role: "GK", number: 1 },
@@ -234,6 +240,7 @@ export function createMatch(input: CreateMatchInput, seed: number): MatchSimulat
     playerOvr: input.playerOvr,
     playerPosition: input.position,
     playerAttrs: input.attrs,
+    playerTraits: input.specialTraits ?? [],
     playerEnergy: input.energy,
     playerMorale: input.morale,
     playerClub: input.playerClub,
@@ -294,7 +301,8 @@ function probabilityFor(state: MatchSimulationState, opportunity: InteractiveOpp
   const teamEdge = clamp((state.playerOvr - state.opponent.strength) / 30, -1, 1);
   const form = clamp(((state.playerEnergy + state.playerMorale) / 2 - 55) / 45, -1, 1);
   const fatigue = clamp((100 - state.playerEnergy) / 100, 0, 1);
-  const logit = -3.2 + 6.5 * q + 0.8 * skillEdge + 0.4 * teamEdge + 0.35 * form - 0.55 * fatigue - 0.35 * opportunity.pressure;
+  const traitBoost = (state.playerTraits ?? []).some((trait) => (trait === "Klej w bucie" && ["przyjęcie","drybling"].includes(opportunity.actionType)) || (trait === "Łowca pola karnego" && ["strzał","dobitka","główka"].includes(opportunity.actionType)) || (trait === "Kieszonkowy reżyser" && opportunity.actionType.includes("podanie")) || (trait === "Czyściciel" && ["odbiór","przechwyt","krycie"].includes(opportunity.actionType)) || (trait === "Pierwszy krok" && opportunity.kind === "reaction")) ? .22 : 0;
+  const logit = -3.2 + 6.5 * q + 0.8 * skillEdge + 0.4 * teamEdge + 0.35 * form - 0.55 * fatigue - 0.35 * opportunity.pressure + traitBoost;
   let probability = sigmoid(logit);
   if (quality >= 85) probability = Math.max(0.86, probability);
   if (quality < 35) probability = Math.min(0.22, probability);
@@ -341,6 +349,7 @@ export function submitAction(state: MatchSimulationState, opportunityId: string,
     `${opportunity.skill} ${Math.round(state.playerAttrs[opportunity.skill])}`,
     `OVR ${state.playerOvr.toFixed(1)} vs ${state.opponent.strength.toFixed(1)}`,
     `energia ${Math.round(state.playerEnergy)}%`,
+    ...((state.playerTraits ?? []).length ? [`cechy: ${(state.playerTraits ?? []).join(", ")}`] : []),
   ];
   const resolution: ActionResolution = { opportunityId, quality: Math.round(quality), chance: Math.round(chance * 1000) / 10, roll: Math.round(random.value * 1000) / 10, success, text: resolutionText(opportunity.successEffect, success, chance, random.value), factors };
   const side = success ? state.playerSide : opportunity.failConcedes ? (state.playerSide === "home" ? "away" : "home") : "neutral";

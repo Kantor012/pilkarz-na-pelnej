@@ -1,9 +1,12 @@
 import { advanceWorldWeek } from "./world";
 import type { WorldState } from "./types";
+import WorldSimulationWorker from "./world-simulation.worker?worker";
 
 export async function advanceWorldWeekAsync(world: WorldState, focusLeagueId: string, excludedFixtureId?: string) {
   if (typeof Worker === "undefined") return advanceWorldWeek(world, focusLeagueId, excludedFixtureId);
-  const worker = new Worker(new URL("./world-simulation.worker.ts", import.meta.url), { type: "module" });
+  let worker: Worker;
+  try { worker = new WorldSimulationWorker(); }
+  catch { return advanceWorldWeek(world, focusLeagueId, excludedFixtureId); }
   const id = `world-${world.season}-${world.round}-${Date.now()}`;
   return new Promise<WorldState>((resolve) => {
     const fallback = window.setTimeout(() => {
