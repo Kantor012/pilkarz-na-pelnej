@@ -105,3 +105,26 @@ test("a complete world round advances tables consistently", async () => {
     assert.equal(league.table.reduce((sum, row) => sum + row.played, 0), 16);
   }
 });
+
+test("season end archives tables and performs two promotions and relegations", async () => {
+  const { createWorld, advanceWorldWeek } = await gameModule("/game/world.ts");
+  let world = createWorld(481516);
+  const originalTop = new Set(world.leagues["PL-L1"].clubIds);
+  for (let round = 1; round <= 30; round += 1) world = advanceWorldWeek(world, "PL-L3");
+  assert.equal(world.season, 2);
+  assert.equal(world.round, 1);
+  assert.equal(world.history.length, 1);
+  assert.equal(world.leagues["PL-L1"].clubIds.filter((id) => !originalTop.has(id)).length, 2);
+  assert.ok(Object.values(world.leagues).every((league) => league.table.every((row) => row.played === 0)));
+  assert.ok(Object.values(world.leagues).every((league) => league.fixtures.length === 240));
+});
+
+test("foreign players materialize deterministically only when requested", async () => {
+  const { createWorld, materializePlayer } = await gameModule("/game/world.ts");
+  const world = createWorld(1337);
+  const first = materializePlayer(world, "ES-1-01", 9);
+  const second = materializePlayer(world, "ES-1-01", 9);
+  assert.deepEqual(first, second);
+  assert.equal(first.clubId, "ES-1-01");
+  assert.ok(first.ovr >= 25 && first.ovr <= 92);
+});

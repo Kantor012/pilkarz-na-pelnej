@@ -15,9 +15,10 @@ import {
   setMatchSpeed, submitAction,
 } from "../game/match-engine";
 import {
-  advanceWorldWeek, createWorld, currentFixtureForClub, findClubByName, recordFixtureResult,
+  createWorld, currentFixtureForClub, findClubByName, recordFixtureResult,
   seedForNewCareer, sortedTable,
 } from "../game/world";
+import { advanceWorldWeekAsync } from "../game/world-client";
 import type {
   AttrKey, Attributes, CountryCode, InteractiveOpportunity, MatchSimulationState,
   Position, SaveGameV3, WorldState,
@@ -144,6 +145,7 @@ export default function CareerGame() {
   const [view, setView] = useState<View>("home");
   const [paused, setPaused] = useState(false);
   const [ready, setReady] = useState(false);
+  const [simulatingWorld, setSimulatingWorld] = useState(false);
   const [intensity, setIntensity] = useState<Intensity>("normalny");
   const [creator, setCreator] = useState({ name: "Mirek Wolej", age: 18, nationality: "PL" as CountryCode, position: "Pomocnik" as Position, foot: "Prawa" as "Prawa" | "Lewa", ovr: 50, club: START_CLUBS[0], style: "Dyrygent", talent: TALENTS[5] });
 
@@ -222,23 +224,27 @@ export default function CareerGame() {
     setPaused(false); setReady(false);
   };
 
-  const finishMatch = () => {
+  const finishMatch = async () => {
     if (!career || !world || !match) return;
+    setSimulatingWorld(true);
     const fixture = currentFixtureForClub(world, career.clubId);
     let scoredWorld = world;
     if (fixture) {
       const [homeGoals, awayGoals] = fixture.homeId === career.clubId ? [match.scoreHome, match.scoreAway] : [match.scoreAway, match.scoreHome];
       scoredWorld = recordFixtureResult(world, fixture.id, homeGoals, awayGoals);
     }
-    setWorld(advanceWorldWeek(scoredWorld, career.leagueId, fixture?.id));
+    const advancedWorld = await advanceWorldWeekAsync(scoredWorld, career.leagueId, fixture?.id);
+    setWorld(advancedWorld);
     const appeared = match.playerRole !== "out";
+    const updatedClub = advancedWorld.clubs[career.clubId];
     setCareer({
-      ...career, week: career.week === 30 ? 1 : career.week + 1, season: career.week === 30 ? career.season + 1 : career.season,
+      ...career, week: career.week === 30 ? 1 : career.week + 1, season: advancedWorld.season, age: career.week === 30 ? career.age + 1 : career.age,
+      leagueId: `${updatedClub.country}-L${updatedClub.tier}`,
       energy: clamp(career.energy - (appeared ? 16 : 4)), morale: clamp(career.morale + (match.scoreHome > match.scoreAway ? 5 : match.scoreHome < match.scoreAway ? -3 : 1)),
       managerTrust: clamp(career.managerTrust + (match.rating - 6) * 2.2), trainingDone: false,
       totals: { matches: career.totals.matches + (appeared ? 1 : 0), goals: career.totals.goals + match.stats.goals, assists: career.totals.assists + match.stats.assists, saves: career.totals.saves + match.stats.saves, rating: career.totals.rating + (appeared ? match.rating : 0) },
     });
-    setMatch(null); setReady(false); setView("home");
+    setMatch(null); setReady(false); setView("home"); setSimulatingWorld(false);
   };
 
   const train = (training: (typeof TRAININGS)[number]) => {
@@ -277,7 +283,7 @@ export default function CareerGame() {
           {match.phase === "opportunity" && opportunity && !ready && <div className="v3-action-overlay"><p className="micro-label">AKCJA INTERAKTYWNA • {opportunity.minute}′</p><h1>{opportunity.title}</h1><p>{opportunity.flavor}</p><div className="v3-action-facts"><span><b>{ATTR_LABELS[opportunity.skill]}</b> kluczowy atrybut</span><span><b>{chance?.[0]}–{chance?.[1]}%</b> po świetnej minigrze</span></div><button className="v3-primary" onClick={() => setReady(true)}><FontAwesomeIcon icon={faCirclePlay} /> JESTEM GOTOWY</button></div>}
           {match.phase === "opportunity" && opportunity && ready && <div className="v3-action-overlay"><h2>{opportunity.prompt}</h2><MiniGame opportunity={opportunity} onDone={(quality) => { setMatch(submitAction(match, opportunity.id, quality)); setReady(false); }} /></div>}
           {match.phase === "resolved" && match.resolved && <div className={`v3-action-overlay v3-result ${match.resolved.success ? "success" : "fail"}`}><p className="micro-label">JAKOŚĆ MINIGRY {match.resolved.quality}/100</p><h1>{match.resolved.success ? "AKCJA UDANA" : "TYM RAZEM NIE WYSZŁO"}</h1><p>{match.resolved.text}</p><div className="v3-exact"><b>Dokładna szansa: {match.resolved.chance}%</b><span>Rzut: {match.resolved.roll}</span></div><small>{match.resolved.factors.join(" • ")}</small><button className="v3-primary" onClick={() => setMatch(continueAfterAction(match))}>GRAMY DALEJ <FontAwesomeIcon icon={faArrowRight} /></button></div>}
-          {match.phase === "finished" && <div className="v3-action-overlay"><p className="micro-label">KONIEC MECZU</p><h1>{match.scoreHome > match.scoreAway ? "SZATNIA ŚPIEWA. NIE RÓWNO, ALE GŁOŚNO." : match.scoreHome === match.scoreAway ? "REMIS. KSIĘGOWY ZADOWOLONY." : "PREZES JUŻ SZUKA WINNEGO."}</h1><div className="v3-final-score">{match.scoreHome}:{match.scoreAway}</div><p>{match.stats.attempts} interaktywnych akcji • ocena {match.rating.toFixed(1)}</p><button className="v3-primary" onClick={finishMatch}>WRACAM DO KARIERY</button></div>}
+          {match.phase === "finished" && <div className="v3-action-overlay"><p className="micro-label">KONIEC MECZU</p><h1>{match.scoreHome > match.scoreAway ? "SZATNIA ŚPIEWA. NIE RÓWNO, ALE GŁOŚNO." : match.scoreHome === match.scoreAway ? "REMIS. KSIĘGOWY ZADOWOLONY." : "PREZES JUŻ SZUKA WINNEGO."}</h1><div className="v3-final-score">{match.scoreHome}:{match.scoreAway}</div><p>{match.stats.attempts} interaktywnych akcji • ocena {match.rating.toFixed(1)}</p><button className="v3-primary" disabled={simulatingWorld} onClick={() => void finishMatch()}>{simulatingWorld ? "ŚWIAT LICZY TABELKI…" : "WRACAM DO KARIERY"}</button></div>}
           <div className="v3-speed"><button onClick={() => setPaused(!paused)}><FontAwesomeIcon icon={paused ? faPlay : faPause} /></button>{([1,2,4] as const).map((speed) => <button key={speed} className={match.speed === speed ? "active" : ""} onClick={() => setMatch(setMatchSpeed(match, speed))}>×{speed}</button>)}</div>
         </section>
         <aside className="v3-commentary"><p className="micro-label">RADIO BOISKOWE</p><h3>Minuta po minucie</h3>{match.events.slice(0, 9).map((event) => <p key={event.id} className={event.type === "goal" ? "goal" : ""}>{event.text}</p>)}</aside>

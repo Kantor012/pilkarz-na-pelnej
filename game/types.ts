@@ -78,6 +78,29 @@ export interface WorldState {
   countries: CountryState[];
   clubs: Record<string, ClubProfile>;
   leagues: Record<string, LeagueState>;
+  history?: WorldSeasonArchive[];
+}
+
+export interface WorldSeasonArchive {
+  season: number;
+  leagues: Array<{
+    leagueId: string;
+    championId: string;
+    promotedIds: string[];
+    relegatedIds: string[];
+    table: LeagueTableRow[];
+  }>;
+}
+
+export interface GeneratedWorldPlayer {
+  id: string;
+  clubId: string;
+  name: string;
+  nationality: CountryCode;
+  position: Position;
+  age: number;
+  ovr: number;
+  potential: number;
 }
 
 export interface PitchPoint {

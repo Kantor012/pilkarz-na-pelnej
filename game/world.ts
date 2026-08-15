@@ -1,5 +1,5 @@
 import { hashSeed, nextRandom, randomInt } from "./rng";
-import type { ClubProfile, CountryCode, CountryState, LeagueState, LeagueTableRow, WorldFixture, WorldState } from "./types";
+import type { ClubProfile, CountryCode, CountryState, GeneratedWorldPlayer, LeagueState, LeagueTableRow, Position, WorldFixture, WorldSeasonArchive, WorldState } from "./types";
 
 const COUNTRY_CATALOG: Record<CountryCode, { name: string; currency: string; cities: string[]; leagueNames: [string, string, string] }> = {
   PL: { name: "Polska", currency: "zł", cities: ["Betonów", "Paragon", "Chrząszczyżewko", "Niedziela", "Wypłata", "Drobny Druk", "Korek", "Rosół", "Rondo", "Tapeta", "Komis", "Zatorze", "Grill", "Paczkomat", "Wiadukt", "Delegacja"], leagueNames: ["Liga Wielkich Nadziei", "Liga Jeszcze Większych Ambicji", "Liga Ostatniej Szansy"] },
@@ -103,7 +103,7 @@ export function createWorld(seed = Date.now()): WorldState {
     });
     return { code, name: catalog.name, currency: catalog.currency, leagueIds };
   });
-  return { version: 1, seed: normalizedSeed, season: 1, round: 1, countries, clubs, leagues };
+  return { version: 1, seed: normalizedSeed, season: 1, round: 1, countries, clubs, leagues, history: [] };
 }
 
 function expectedGoals(home: ClubProfile, away: ClubProfile) {
@@ -156,8 +156,43 @@ export function advanceWorldWeek(world: WorldState, focusLeagueId: string, exclu
       applyResult(league.table, fixture.homeId, fixture.awayId, homeResult.goals, awayResult.goals);
     });
   });
-  nextWorld.round = world.round >= 30 ? 1 : world.round + 1;
-  if (world.round >= 30) nextWorld.season += 1;
+  if (world.round >= 30) return concludeSeason(nextWorld);
+  nextWorld.round = world.round + 1;
+  return nextWorld;
+}
+
+export function concludeSeason(world: WorldState) {
+  const nextWorld: WorldState = structuredClone(world);
+  const archive: WorldSeasonArchive = { season: world.season, leagues: [] };
+  for (const country of nextWorld.countries) {
+    const first = nextWorld.leagues[country.leagueIds[0]];
+    const second = nextWorld.leagues[country.leagueIds[1]];
+    const third = nextWorld.leagues[country.leagueIds[2]];
+    const firstTable = sortedTable(first);
+    const secondTable = sortedTable(second);
+    const thirdTable = sortedTable(third);
+    const firstDown = firstTable.slice(-2).map((row) => row.clubId);
+    const secondUp = secondTable.slice(0, 2).map((row) => row.clubId);
+    const secondDown = secondTable.slice(-2).map((row) => row.clubId);
+    const thirdUp = thirdTable.slice(0, 2).map((row) => row.clubId);
+    archive.leagues.push(
+      { leagueId: first.id, championId: firstTable[0].clubId, promotedIds: [], relegatedIds: firstDown, table: firstTable },
+      { leagueId: second.id, championId: secondTable[0].clubId, promotedIds: secondUp, relegatedIds: secondDown, table: secondTable },
+      { leagueId: third.id, championId: thirdTable[0].clubId, promotedIds: thirdUp, relegatedIds: [], table: thirdTable },
+    );
+    first.clubIds = first.clubIds.filter((id) => !firstDown.includes(id)).concat(secondUp);
+    second.clubIds = second.clubIds.filter((id) => !secondUp.includes(id) && !secondDown.includes(id)).concat(firstDown, thirdUp);
+    third.clubIds = third.clubIds.filter((id) => !thirdUp.includes(id)).concat(secondDown);
+    ([first, second, third] as LeagueState[]).forEach((league, index) => {
+      const tier = (index + 1) as 1 | 2 | 3;
+      league.clubIds.forEach((clubId) => { nextWorld.clubs[clubId].tier = tier; });
+      league.table = emptyTable(league.clubIds);
+      league.fixtures = createRoundRobinFixtures(league.id, league.clubIds);
+    });
+  }
+  nextWorld.history = [...(nextWorld.history ?? []), archive].slice(-20);
+  nextWorld.season = world.season + 1;
+  nextWorld.round = 1;
   return nextWorld;
 }
 
@@ -193,4 +228,38 @@ export function randomClubFromLeague(world: WorldState, leagueId: string, state:
   const league = world.leagues[leagueId];
   const roll = randomInt(state, 0, league.clubIds.length - 1);
   return { state: roll.state, club: world.clubs[league.clubIds[roll.value]] };
+}
+
+const FIRST_NAMES: Record<CountryCode, string[]> = {
+  PL: ["Mirek", "Kacper", "Wojtek", "Darek", "Bartosz", "Igor"], DE: ["Lukas", "Felix", "Jonas", "Karl", "Emil", "Nico"],
+  IT: ["Luca", "Marco", "Enzo", "Paolo", "Dario", "Matteo"], NL: ["Daan", "Sem", "Luuk", "Bram", "Jesse", "Thijs"],
+  FR: ["Lucas", "Hugo", "Theo", "Jules", "Noah", "Maxime"], EN: ["Jack", "Harry", "Alfie", "Lewis", "Ben", "Mason"],
+  PT: ["Tiago", "Rui", "Joao", "Nuno", "Diogo", "Andre"], ES: ["Pablo", "Hugo", "Iker", "Dani", "Sergio", "Raul"],
+};
+const LAST_NAMES = ["Paragon", "Korek", "Rondo", "Factura", "Kassabon", "Biscuit", "Rotonda", "Polder", "Baguette", "Bratwurst", "Autobus", "Wiadukt"];
+const POSITIONS: Position[] = ["Bramkarz", "Obrońca", "Obrońca", "Obrońca", "Pomocnik", "Pomocnik", "Pomocnik", "Napastnik"];
+
+export function materializePlayer(world: WorldState, clubId: string, slot: number): GeneratedWorldPlayer {
+  const club = world.clubs[clubId];
+  if (!club) throw new Error(`Unknown club: ${clubId}`);
+  let state = hashSeed(`${world.seed}-${world.season}-${clubId}-${slot}`);
+  const first = randomInt(state, 0, FIRST_NAMES[club.country].length - 1); state = first.state;
+  const last = randomInt(state, 0, LAST_NAMES.length - 1); state = last.state;
+  const age = randomInt(state, 17, 34); state = age.state;
+  const variation = nextRandom(state);
+  const ovr = Math.round(clampNumber(club.strength - 7 + variation.value * 14, 25, 92) * 10) / 10;
+  return {
+    id: `${clubId}-P${String(slot + 1).padStart(2, "0")}`,
+    clubId,
+    name: `${FIRST_NAMES[club.country][first.value]} ${LAST_NAMES[last.value]}`,
+    nationality: club.country,
+    position: POSITIONS[slot % POSITIONS.length],
+    age: age.value,
+    ovr,
+    potential: Math.round(clampNumber(ovr + Math.max(0, 24 - age.value) * 0.8 + variation.value * 5, ovr, 96)),
+  };
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
