@@ -621,3 +621,53 @@ body { background:#071019; }
   .training-card { padding:9px; }.training-card p { font-size:8px; }.training-card b,.training-card em { font-size:6px; }
   .match-stadium-art { inset:54px 0 0; }.scoreboard { flex-basis:82px; min-height:82px; }.match-layout { grid-template-columns:190px minmax(480px,1fr) 215px; }.choice-arena { height:120px; }.ready-gate { min-height:145px; }
 }
+
+/* CAREER REDESIGN — ONE GAME CANVAS, NO ADMIN SIDEBARS */
+.career-redesign { background:radial-gradient(circle at 78% 4%,rgba(244,173,36,.08),transparent 25%),#08111a; }
+.career-redesign .career-top { border-bottom-color:rgba(255,255,255,.07); }
+.career-redesign .game-nav { width:min(1520px,calc(100% - 32px)); margin:0 auto; border:1px solid var(--line); border-top:0; border-radius:0 0 12px 12px; background:rgba(13,24,35,.84); }
+.career-redesign .career-grid { width:min(1520px,calc(100% - 32px)); height:calc(100dvh - 130px); min-height:0; margin:14px auto 0; padding:0; display:grid; grid-template-columns:1fr; grid-template-rows:205px minmax(0,1fr); gap:13px; position:relative; }
+.career-redesign .profile-panel { grid-area:1/1; width:100%; height:205px; padding:20px 370px 20px 22px; display:grid; grid-template-columns:94px minmax(220px,1.05fr) 150px minmax(220px,1fr) 175px; grid-template-rows:26px 55px 48px; column-gap:18px; row-gap:7px; align-items:center; border:1px solid rgba(255,255,255,.1); border-radius:14px; background-image:linear-gradient(90deg,rgba(7,16,25,.97) 0%,rgba(7,16,25,.9) 42%,rgba(7,16,25,.72) 72%,rgba(7,16,25,.94) 100%),url('/stadium-career-hero.png'); background-size:cover; background-position:center 62%; box-shadow:0 20px 50px rgba(0,0,0,.25); overflow:hidden; }
+.career-redesign .profile-shirt { grid-column:1; grid-row:1/4; width:94px; height:112px; margin:0; clip-path:none; border:1px solid rgba(244,173,36,.45); border-radius:13px; background:linear-gradient(155deg,rgba(244,173,36,.98),#ffcf63); box-shadow:0 12px 26px rgba(0,0,0,.28); }
+.career-redesign .profile-shirt span { font-size:46px; transform:none; }.career-redesign .profile-shirt small { margin-top:-25px; font-size:8px; }
+.career-redesign .profile-panel>.micro-label { grid-column:2; grid-row:1; align-self:end; color:var(--gold); }
+.career-redesign .profile-panel>h1 { grid-column:2; grid-row:2; align-self:center; margin:0; font-size:clamp(25px,2.2vw,35px); }
+.career-redesign .club-name { grid-column:2; grid-row:3; align-self:start; margin:0; color:#d7dfe6; font-size:12px; }.career-redesign .club-name small { margin-top:5px; color:#778695; font-size:8px; }
+.career-redesign .ovr-block { grid-column:3; grid-row:1/4; height:100%; padding:14px; display:flex; flex-direction:column; justify-content:center; border-color:rgba(255,255,255,.12); border-radius:11px; background:rgba(7,16,25,.72); backdrop-filter:blur(10px); }
+.career-redesign .ovr-block>div { display:flex; align-items:baseline; justify-content:space-between; }.career-redesign .ovr-block span { color:var(--gold); font-size:9px; }.career-redesign .ovr-block strong { font-size:38px; }.career-redesign .ovr-block p { margin:5px 0 0; font-size:9px; line-height:1.4; }
+.career-redesign .vitals { grid-column:4; grid-row:1/4; width:100%; margin:0; padding:12px 15px; gap:10px; border:1px solid var(--line); border-radius:11px; background:rgba(7,16,25,.68); backdrop-filter:blur(10px); }
+.career-redesign .vitals span { font-size:7px; }.career-redesign .vitals strong { font-size:9px; }.career-redesign .vitals i { height:4px; background:#283849; }.career-redesign .vitals i b { background:linear-gradient(90deg,var(--gold),#ffd870); }
+.career-redesign .wallet { grid-column:5; grid-row:1/2; align-self:stretch; padding:9px 11px; border:1px solid rgba(244,173,36,.25); border-left:3px solid var(--gold); border-radius:9px; background:rgba(7,16,25,.7); }.career-redesign .wallet span { font-size:6px; }.career-redesign .wallet strong { font-size:15px; }.career-redesign .wallet small { display:none; }
+.career-redesign .talent-card { grid-column:5; grid-row:2/4; align-self:stretch; margin:0; padding:10px 11px; justify-content:center; border-radius:9px; background:rgba(7,16,25,.7); }.career-redesign .talent-card span { font-size:6px; }.career-redesign .talent-card strong { font-size:12px; }.career-redesign .talent-card small { font-size:7px; }
+.career-redesign .next-match-panel { grid-area:1/1; justify-self:end; z-index:2; width:348px; height:205px; padding:17px 18px; display:grid; grid-template-columns:1fr auto; grid-template-rows:auto 64px auto 48px; gap:5px 12px; border:1px solid rgba(244,173,36,.22); border-radius:14px; background:linear-gradient(145deg,rgba(24,36,48,.96),rgba(10,19,29,.98)); box-shadow:-14px 0 35px rgba(0,0,0,.24); overflow:hidden; }
+.career-redesign .next-match-panel>.micro-label { grid-column:1/-1; grid-row:1; color:var(--gold); }
+.career-redesign .versus { grid-column:1; grid-row:2; width:150px; margin:0; align-self:center; }.career-redesign .versus .mini-crest { width:48px; height:52px; border-radius:9px 9px 18px 18px; font-size:9px; }
+.career-redesign .next-match-panel>h2 { grid-column:2; grid-row:2; align-self:center; max-width:145px; margin:0; font-size:18px; line-height:1.05; }
+.career-redesign .next-match-panel>p { grid-column:1/-1; grid-row:3; margin:0; font-size:9px; line-height:1.3; }.career-redesign .impact-note { display:none; }
+.career-redesign .match-button { grid-column:1/-1; grid-row:4; min-height:46px; padding:9px 13px; font-size:9px; border-radius:8px; }
+.career-redesign .season-track { display:none; }
+.career-redesign .dashboard { grid-area:2/1; height:100%; min-height:0; padding:0; gap:9px; }
+.career-redesign .welcome-row { min-height:47px; padding:0 4px; }.career-redesign .welcome-row h2 { margin-top:3px; font-size:clamp(20px,1.8vw,27px); }.career-redesign .record { padding-right:4px; }
+.career-redesign .focused-section,.career-redesign .career-overview { border-radius:13px; box-shadow:none; }
+.career-redesign .training-section.focused-section,.career-redesign .attributes-section.focused-section,.career-redesign .schedule-section.focused-section { padding:16px 18px; }
+.career-redesign .section-title { margin-bottom:11px; }.career-redesign .section-title h3 { font-size:17px; }
+.career-redesign .training-grid { height:calc(100% - 48px); grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(2,minmax(0,1fr)); gap:8px; }
+.career-redesign .training-card { min-height:0; height:100%; padding:12px; }.career-redesign .training-card>strong { margin:7px 0 5px; font-size:12px; }.career-redesign .training-card p { margin-bottom:7px; font-size:9px; }.career-redesign .training-card b,.career-redesign .training-card em { font-size:6.5px; }
+.career-redesign .attributes-grid { height:calc(100% - 48px); grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,minmax(0,1fr)); gap:7px; }
+.career-redesign .attribute { height:100%; display:flex; flex-direction:column; justify-content:center; }
+.career-redesign .schedule-list { height:calc(100% - 48px); grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(2,minmax(0,1fr)); }
+.career-redesign .career-overview { padding:18px; grid-template-columns:1.35fr .65fr; }.career-redesign .overview-primary { padding:clamp(24px,2.3vw,38px); background:linear-gradient(90deg,rgba(7,16,25,.5),rgba(7,16,25,.92)),url('/stadium-career-hero.png'); background-size:cover; background-position:center; }.career-redesign .overview-primary h3 { max-width:650px; font-size:clamp(28px,2.7vw,42px); }.career-redesign .overview-stats article { padding:14px; }.career-redesign .overview-stats strong { font-size:clamp(24px,2.1vw,34px); }
+
+@media (max-width:1280px) and (min-width:761px) {
+  .career-redesign .career-grid,.career-redesign .game-nav { width:calc(100% - 20px); }
+  .career-redesign .profile-panel { padding-right:320px; grid-template-columns:82px minmax(180px,1fr) 125px minmax(190px,1fr); }
+  .career-redesign .profile-shirt { width:82px; height:98px; }.career-redesign .wallet,.career-redesign .talent-card { display:none; }
+  .career-redesign .next-match-panel { width:300px; }.career-redesign .next-match-panel>h2 { font-size:16px; }.career-redesign .versus { width:125px; }
+}
+@media (max-width:900px) {
+  .career-redesign { height:auto; min-height:100dvh; overflow:auto; }
+  .career-redesign .career-grid { height:auto; display:flex; flex-direction:column; }
+  .career-redesign .profile-panel { height:auto; padding:18px; grid-template-columns:80px 1fr 120px; grid-template-rows:auto; }.career-redesign .profile-shirt { grid-column:1; grid-row:1/4; }.career-redesign .profile-panel>.micro-label,.career-redesign .profile-panel>h1,.career-redesign .club-name { grid-column:2; }.career-redesign .ovr-block { grid-column:3; grid-row:1/4; }.career-redesign .vitals,.career-redesign .wallet,.career-redesign .talent-card { display:none; }
+  .career-redesign .next-match-panel { position:static; width:100%; height:auto; display:flex; flex-wrap:wrap; align-items:center; }.career-redesign .match-button { margin-left:auto; width:auto; }
+  .career-redesign .dashboard { min-height:620px; }.career-redesign .training-grid { grid-template-columns:1fr 1fr; grid-template-rows:none; height:auto; }.career-redesign .schedule-list { grid-template-columns:1fr; height:auto; }
+}

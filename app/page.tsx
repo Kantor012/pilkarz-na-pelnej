@@ -720,7 +720,7 @@ export default function Home() {
   const showDecision = career.week % 3 === 0 && !career.decisions.includes(career.week);
 
   return (
-    <main className="career-screen">
+    <main className="career-screen career-redesign">
       <header className="career-top"><div className="brand-lockup"><div className="brand-mark">P:N:P</div><strong>PIŁKARZ: NA PEŁNEJ</strong></div><div className="season-chip">SEZON {career.season} • TYDZIEŃ {career.week}</div><button className="quiet-button" onClick={reset}>NOWA KARIERA</button></header>
       <nav className="game-nav" aria-label="Główna nawigacja kariery">
         <button className={careerView === "career" ? "active" : ""} onClick={() => setCareerView("career")}><span>01</span>KARIERA</button>
