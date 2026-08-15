@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBed, faBullseye, faClipboardList, faDumbbell, faFutbol } from "@fortawesome/free-solid-svg-icons";
+import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
+import { faArrowsLeftRight, faBed, faBolt, faBullhorn, faBullseye, faCalendarDays, faCheck, faClipboardList, faCoins, faDumbbell, faFlagCheckered, faFutbol, faGaugeHigh, faHand, faHeartPulse, faHouse, faPersonRunning, faShieldHalved, faStar, faTrophy, faUser, faWandMagicSparkles } from "@fortawesome/free-solid-svg-icons";
 
 type Position = "Napastnik" | "Pomocnik" | "Obrońca" | "Bramkarz";
 type AttrKey =
@@ -191,6 +192,18 @@ const TRAINING_ICONS = {
   tactics: faClipboardList,
   recovery: faBed,
 } as const;
+
+const ATTRIBUTE_ICONS: Record<AttrKey, IconDefinition> = {
+  technika: faFutbol,
+  strzal: faBullseye,
+  podania: faArrowsLeftRight,
+  drybling: faPersonRunning,
+  odbior: faShieldHalved,
+  szybkosc: faBolt,
+  sila: faDumbbell,
+  kondycja: faHeartPulse,
+  refleks: faHand,
+};
 
 function clamp(value: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
@@ -733,14 +746,14 @@ export default function Home() {
     <main className="career-screen career-console">
       <header className="career-top"><div className="brand-lockup"><div className="brand-mark">P:N:P</div><strong>PIŁKARZ: NA PEŁNEJ</strong></div><div className="season-chip">SEZON {career.season} • TYDZIEŃ {career.week}</div><button className="quiet-button" onClick={reset}>NOWA KARIERA</button></header>
       <nav className="game-nav" aria-label="Główna nawigacja kariery">
-        <button className={careerView === "career" ? "active" : ""} onClick={() => setCareerView("career")}><span>01</span>KARIERA</button>
-        <button className={careerView === "player" ? "active" : ""} onClick={() => setCareerView("player")}><span>02</span>ZAWODNIK</button>
-        <button className={careerView === "training" ? "active" : ""} onClick={() => setCareerView("training")}><span>03</span>TRENING</button>
-        <button className={careerView === "schedule" ? "active" : ""} onClick={() => setCareerView("schedule")}><span>04</span>TERMINARZ</button>
+        <button className={careerView === "career" ? "active" : ""} onClick={() => setCareerView("career")}><span><FontAwesomeIcon icon={faHouse} /></span>KARIERA</button>
+        <button className={careerView === "player" ? "active" : ""} onClick={() => setCareerView("player")}><span><FontAwesomeIcon icon={faUser} /></span>ZAWODNIK</button>
+        <button className={careerView === "training" ? "active" : ""} onClick={() => setCareerView("training")}><span><FontAwesomeIcon icon={faDumbbell} /></span>TRENING</button>
+        <button className={careerView === "schedule" ? "active" : ""} onClick={() => setCareerView("schedule")}><span><FontAwesomeIcon icon={faCalendarDays} /></span>TERMINARZ</button>
         <div className="resource-strip">
-          <div><span className="resource-icon energy-icon">E</span><small>ENERGIA</small><strong>{Math.round(career.energy)}</strong></div>
-          <div><span className="resource-icon media-icon">M</span><small>ROZGŁOS</small><strong>{Math.round(career.media)}</strong></div>
-          <div><span className="resource-icon money-icon">ZŁ</span><small>KONTO</small><strong>{Math.round(career.money / 1000)}K</strong></div>
+          <div><span className="resource-icon energy-icon"><FontAwesomeIcon icon={faBolt} /></span><small>ENERGIA</small><strong>{Math.round(career.energy)}</strong></div>
+          <div><span className="resource-icon media-icon"><FontAwesomeIcon icon={faBullhorn} /></span><small>ROZGŁOS</small><strong>{Math.round(career.media)}</strong></div>
+          <div><span className="resource-icon money-icon"><FontAwesomeIcon icon={faCoins} /></span><small>KONTO</small><strong>{Math.round(career.money / 1000)}K</strong></div>
         </div>
       </nav>
       <section className="career-grid">
@@ -754,7 +767,7 @@ export default function Home() {
             <div><span>PROFESJONALIZM</span><strong>{Math.round(career.professionalism)}%</strong><i><b style={{ width: `${career.professionalism}%` }} /></i></div>
           </div>
           <div className="wallet"><span>STAN KONTA</span><strong>{career.money.toLocaleString("pl-PL")} zł</strong><small>Premia wpłynie. Kiedyś.</small></div>
-          <div className={`talent-card ${career.hiddenRevealed ? "revealed" : "hidden"}`}><span>TALENT TRENINGOWY</span><strong>{career.hiddenRevealed ? HIDDEN_TALENTS[career.player.hiddenTalent].label : "???"}</strong><small>{career.hiddenRevealed ? HIDDEN_TALENTS[career.player.hiddenTalent].copy : `${career.trainingCount}/3 treningów do odkrycia`}</small></div>
+          <div className={`talent-card ${career.hiddenRevealed ? "revealed" : "hidden"}`}><FontAwesomeIcon className="talent-icon" icon={faWandMagicSparkles} /><span>TALENT TRENINGOWY</span><strong>{career.hiddenRevealed ? HIDDEN_TALENTS[career.player.hiddenTalent].label : "???"}</strong><small>{career.hiddenRevealed ? HIDDEN_TALENTS[career.player.hiddenTalent].copy : `${career.trainingCount}/3 treningów do odkrycia`}</small></div>
         </aside>
 
         <section className="dashboard">
@@ -767,7 +780,7 @@ export default function Home() {
           {careerView === "career" && (
             <section className="career-overview">
               <div className="overview-primary"><p className="micro-label">NAJWAŻNIEJSZE TERAZ</p><h3>{career.trainingDone ? "Plan wykonany. Możesz wychodzić na boisko." : "Masz jeden trening przed kolejnym meczem."}</h3><p>{career.trainingDone ? `Energia ${Math.round(career.energy)}%. Rywal: ${nextOpponent.name}.` : "Wybierz rozwój, który naprawdę zmieni atrybuty i przyszły OVR."}</p><div><button onClick={() => setCareerView("training")}>{career.trainingDone ? "ZOBACZ PLAN" : "WYBIERAM TRENING"} →</button><button onClick={() => setCareerView("player")}>SPRAWDZAM OVR</button></div></div>
-              <div className="overview-stats"><article><span>OVR</span><strong>{currentOvr.toFixed(1)}</strong><small>potencjał {career.player.potential}</small></article><article><span>FORMA</span><strong>{Math.round((career.energy + career.morale) / 2)}%</strong><small>energia + morale</small></article><article><span>MECZE</span><strong>{career.totals.matches}</strong><small>{career.totals.goals} gole • {career.totals.assists} asysty</small></article><article><span>TYDZIEŃ</span><strong>{career.week}</strong><small>sezon {career.season}</small></article></div>
+              <div className="overview-stats"><article className="stat-ovr"><FontAwesomeIcon icon={faStar} /><span>OVR</span><strong>{currentOvr.toFixed(1)}</strong><small>potencjał {career.player.potential}</small></article><article className="stat-form"><FontAwesomeIcon icon={faGaugeHigh} /><span>FORMA</span><strong>{Math.round((career.energy + career.morale) / 2)}%</strong><small>energia + morale</small></article><article className="stat-matches"><FontAwesomeIcon icon={faFutbol} /><span>MECZE</span><strong>{career.totals.matches}</strong><small>{career.totals.goals} gole • {career.totals.assists} asysty</small></article><article className="stat-week"><FontAwesomeIcon icon={faCalendarDays} /><span>TYDZIEŃ</span><strong>{career.week}</strong><small>sezon {career.season}</small></article></div>
             </section>
           )}
 
@@ -786,15 +799,15 @@ export default function Home() {
             <div className="section-title"><div><p className="micro-label">TWOJE LICZBY</p><h3>Skąd bierze się OVR {currentOvr.toFixed(1)}?</h3></div><span className="formula-chip">SUMA WAŻONA DLA POZYCJI</span></div>
             <div className="attributes-grid">{(Object.keys(career.player.attrs) as AttrKey[]).map((key) => {
               const value = career.player.attrs[key]; const weight = WEIGHTS[career.player.position][key] ?? 0;
-              return <div className={`attribute ${weight >= 0.15 ? "key-attribute" : ""}`} key={key}><div><span>{ATTR_LABELS[key]}</span>{weight > 0 && <small>{Math.round(weight * 100)}% OVR</small>}<strong>{value.toFixed(1)}</strong></div><i><b style={{ width: `${value}%` }} /></i></div>;
+              return <div className={`attribute attribute-${key} ${weight >= 0.15 ? "key-attribute" : ""}`} key={key}><div><FontAwesomeIcon className="attribute-icon" icon={ATTRIBUTE_ICONS[key]} /><span>{ATTR_LABELS[key]}</span>{weight > 0 && <small>{Math.round(weight * 100)}% OVR</small>}<strong>{value.toFixed(1)}</strong></div><i><b style={{ width: `${value}%` }} /></i></div>;
             })}</div>
           </section>}
 
-          {careerView === "schedule" && <section className="schedule-section focused-section"><div className="section-title"><div><p className="micro-label">SEZON {career.season}</p><h3>Sześć kolejek, zero łatwych wymówek.</h3></div><span className="formula-chip">KOLEJKA {career.matchIndex + 1}/{OPPONENTS.length}</span></div><div className="schedule-list">{OPPONENTS.map((opponent, index) => <article key={opponent.short} className={index < career.matchIndex ? "played" : index === career.matchIndex ? "current" : ""}><span>{String(index + 1).padStart(2, "0")}</span><div className="mini-crest opponent" style={{ background: opponent.color }}>{opponent.short.slice(0, 2)}</div><div><strong>{opponent.name}</strong><small>Siła zespołu {opponent.strength}</small></div><b>{index < career.matchIndex ? "ROZEGRANY" : index === career.matchIndex ? "NASTĘPNY" : "WKRÓTCE"}</b></article>)}</div></section>}
+          {careerView === "schedule" && <section className="schedule-section focused-section"><div className="section-title"><div><p className="micro-label">SEZON {career.season}</p><h3>Sześć kolejek, zero łatwych wymówek.</h3></div><span className="formula-chip"><FontAwesomeIcon icon={faCalendarDays} /> KOLEJKA {career.matchIndex + 1}/{OPPONENTS.length}</span></div><div className="schedule-list">{OPPONENTS.map((opponent, index) => <article key={opponent.short} className={index < career.matchIndex ? "played" : index === career.matchIndex ? "current" : ""}><span>{String(index + 1).padStart(2, "0")}</span><div className="mini-crest opponent" style={{ background: opponent.color }}>{opponent.short.slice(0, 2)}</div><div><strong>{opponent.name}</strong><small>Siła zespołu {opponent.strength}</small></div><b><FontAwesomeIcon icon={index < career.matchIndex ? faCheck : index === career.matchIndex ? faFlagCheckered : faCalendarDays} /> {index < career.matchIndex ? "ROZEGRANY" : index === career.matchIndex ? "NASTĘPNY" : "WKRÓTCE"}</b></article>)}</div></section>}
         </section>
 
         <aside className="next-match-panel">
-          <p className="micro-label">NASTĘPNY MECZ • {career.matchIndex + 1}/{OPPONENTS.length}</p><div className="versus"><div className="mini-crest">{career.player.club.slice(0, 2).toUpperCase()}</div><span>VS</span><div className="mini-crest opponent" style={{ background: nextOpponent.color }}>{nextOpponent.short.slice(0, 2)}</div></div><h2>{nextOpponent.name}</h2><p>Siła rywala <strong>{nextOpponent.strength}</strong><br />Twoja forma zależy od energii i minigier.</p>
+          <p className="micro-label"><FontAwesomeIcon icon={faTrophy} /> NASTĘPNY MECZ • {career.matchIndex + 1}/{OPPONENTS.length}</p><div className="versus"><div className="mini-crest">{career.player.club.slice(0, 2).toUpperCase()}</div><span>VS</span><div className="mini-crest opponent" style={{ background: nextOpponent.color }}>{nextOpponent.short.slice(0, 2)}</div></div><h2>{nextOpponent.name}</h2><p>Siła rywala <strong>{nextOpponent.strength}</strong><br />Twoja forma zależy od energii i minigier.</p>
           <div className="impact-note"><strong>TU NIE MA „+5% SZANS”.</strong><p>Udany strzał daje gola. Udana obrona kasuje gola. Dobra asysta zmienia wynik na tablicy.</p></div>
           <button className="match-button" onClick={startMatch} disabled={showDecision}>{showDecision ? "NAJPIERW DECYZJA" : career.trainingDone ? "WYCHODZĘ NA BOISKO" : "GRAM BEZ TRENINGU"}<span>→</span></button>
         </aside>
