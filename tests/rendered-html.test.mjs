@@ -180,3 +180,19 @@ test("contracts settle money and transfers really change club terms", async () =
   assert.equal(transferred.offers.length, 0);
   assert.ok(transferred.ledger[0].amountEur > 0);
 });
+
+test("cups, Europe and national teams use the complete world", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { createCompetitions, advanceCup, updateCallUp } = await gameModule("/game/competitions.ts");
+  const world = createWorld(9090);
+  let competitions = createCompetitions(world, "PL", 72);
+  assert.equal(Object.keys(competitions.cups).length, 8);
+  assert.equal(competitions.cups.PL.ties.length, 16);
+  assert.equal(competitions.europe.groups.length, 8);
+  assert.ok(competitions.europe.groups.every((group) => group.length === 4));
+  const round32 = advanceCup(competitions.cups.PL, world);
+  assert.equal(round32.round, "round32");
+  assert.equal(round32.ties.length, 16);
+  competitions = updateCallUp(competitions, "PL", 75, 80, 900);
+  assert.equal(competitions.nationalTeams.find((team) => team.country === "PL").calledUp, true);
+});
