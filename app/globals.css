@@ -3,7 +3,7 @@
 :root { --ink:#0a1018; --paper:#f3efe4; --lime:#bff34b; --yellow:#ffd84d; --red:#ff5b45; --blue:#6ca8ff; --muted:#8e9aa8; --line:rgba(255,255,255,.13); }
 * { box-sizing:border-box; }
 html { background:var(--ink); }
-body { margin:0; background:var(--ink); color:#fff; font-family:var(--font-geist-sans),Arial,sans-serif; }
+body { --font-geist-sans:var(--font-montserrat); --font-geist-mono:var(--font-montserrat); margin:0; background:var(--ink); color:#fff; font-family:var(--font-montserrat),Arial,sans-serif; font-feature-settings:"ss01" 1,"kern" 1; text-rendering:optimizeLegibility; }
 button,input,select { font:inherit; }
 button { cursor:pointer; }
 button:disabled { cursor:not-allowed; }
@@ -711,3 +711,19 @@ body { background:#071019; }
 @media (max-width:760px) {
   .career-console { height:auto; min-height:100dvh; display:block; overflow:auto; }.career-console .career-top { height:58px; min-height:58px; }.career-console .game-nav { height:auto; padding:8px; flex-direction:row; overflow:auto; border-right:0; border-bottom:1px solid var(--line); }.career-console .game-nav::before,.career-console .resource-strip { display:none; }.career-console .game-nav>button { width:auto; min-width:112px; height:42px; }.career-console .career-grid { height:auto; min-height:calc(100dvh - 116px); padding:10px; display:flex; flex-direction:column; }.career-console .profile-panel { order:0; height:180px; }.career-console .dashboard { order:1; min-height:620px; }.career-console .next-match-panel { order:2; min-height:430px; }.career-console .training-grid,.career-console .schedule-list { height:auto; grid-template-columns:1fr; grid-template-rows:none; }
 }
+
+/* ICON-LED TRAINING CARDS */
+.career-console .training-card { position:relative; display:grid; grid-template-rows:auto 1fr auto; gap:12px; padding:17px; border-color:rgba(255,255,255,.1); background:linear-gradient(145deg,#172635,#111e2a); overflow:hidden; }
+.career-console .training-card::after { content:''; position:absolute; right:-34px; bottom:-46px; width:130px; height:130px; border-radius:50%; background:var(--card-glow,rgba(243,170,33,.08)); filter:blur(3px); pointer-events:none; }
+.career-console .training-card-top { position:relative; z-index:1; display:flex; align-items:center; gap:13px; }
+.career-console .training-icon { flex:0 0 46px; width:46px; height:46px; display:grid; place-items:center; border-radius:11px; color:var(--icon-color,#f3aa21); background:var(--icon-bg,rgba(243,170,33,.13)); border:1px solid color-mix(in srgb,var(--icon-color,#f3aa21) 28%,transparent); font-size:19px; }
+.career-console .training-card-top>div { min-width:0; display:grid; gap:4px; }.career-console .training-card-top small { color:var(--icon-color,#f3aa21); font:800 8px var(--font-montserrat),sans-serif; letter-spacing:.09em; }.career-console .training-card-top strong { font-size:14px; line-height:1.15; }
+.career-console .training-card>p { position:relative; z-index:1; align-self:start; margin:0; max-width:340px; color:#9dabb8; font-size:10px; line-height:1.5; }
+.career-console .training-effects { position:relative; z-index:1; display:flex; flex-wrap:wrap; align-items:center; gap:5px; }
+.career-console .training-effects b,.career-console .training-effects em { padding:5px 7px; border-radius:6px; background:rgba(255,255,255,.055); color:#dfe6eb; font:700 7px var(--font-montserrat),sans-serif; }.career-console .training-effects em.negative { color:#ff9c8b; background:rgba(255,102,82,.09); }.career-console .training-effects em.positive { color:#7cebb0; background:rgba(48,219,125,.09); }
+.career-console .training-card:not(:disabled):hover { transform:translateY(-3px); border-color:color-mix(in srgb,var(--icon-color,#f3aa21) 62%,transparent); box-shadow:0 14px 28px rgba(0,0,0,.24); }
+.career-console .training-ball { --icon-color:#f3aa21; --icon-bg:rgba(243,170,33,.13); --card-glow:rgba(243,170,33,.11); }
+.career-console .training-finish { --icon-color:#ff6b58; --icon-bg:rgba(255,107,88,.13); --card-glow:rgba(255,107,88,.1); }
+.career-console .training-gym { --icon-color:#7bafff; --icon-bg:rgba(123,175,255,.13); --card-glow:rgba(123,175,255,.1); }
+.career-console .training-tactics { --icon-color:#c783ff; --icon-bg:rgba(199,131,255,.13); --card-glow:rgba(199,131,255,.1); }
+.career-console .training-recovery { --icon-color:#45d998; --icon-bg:rgba(69,217,152,.13); --card-glow:rgba(69,217,152,.1); }

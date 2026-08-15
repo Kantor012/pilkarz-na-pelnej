@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faBed, faBullseye, faClipboardList, faDumbbell, faFutbol } from "@fortawesome/free-solid-svg-icons";
 
 type Position = "Napastnik" | "Pomocnik" | "Obrońca" | "Bramkarz";
 type AttrKey =
@@ -181,6 +183,14 @@ const TRAININGS: Array<{
   { id: "tactics", eyebrow: "GŁOWA", title: "Wideo z trenerem", copy: "Dwie godziny analizy, z czego 80 minut to pauzowanie pilota.", gains: { odbior: 0.65, podania: 0.65, refleks: 0.45 }, energy: -7, morale: 0 },
   { id: "recovery", eyebrow: "REGENERACJA", title: "Rosół i sen", copy: "Metoda zatwierdzona przez babcię oraz fizjoterapeutę.", gains: { kondycja: 0.2 }, energy: 24, morale: 4 },
 ];
+
+const TRAINING_ICONS = {
+  ball: faFutbol,
+  finish: faBullseye,
+  gym: faDumbbell,
+  tactics: faClipboardList,
+  recovery: faBed,
+} as const;
 
 function clamp(value: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
@@ -764,9 +774,10 @@ export default function Home() {
           {careerView === "training" && <section className="training-section focused-section">
             <div className="section-title"><div><p className="micro-label">PLAN TYGODNIA</p><h3>Jeden wybór. Konkretne liczby.</h3></div><span className={career.trainingDone ? "done-chip" : "open-chip"}>{career.trainingDone ? "PLAN ZREALIZOWANY" : "WYBIERZ TRENING"}</span></div>
             <div className="training-grid">{TRAININGS.map((training) => (
-              <button key={training.id} disabled={career.trainingDone} className="training-card" onClick={() => applyTraining(training)}>
-                <span>{training.eyebrow}</span><strong>{training.title}</strong><p>{training.copy}</p>
-                <div>{Object.entries(training.gains).map(([key, gain]) => <b key={key}>+{gain} {ATTR_LABELS[key as AttrKey]}</b>)}<em className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{training.energy} energii</em></div>
+              <button key={training.id} disabled={career.trainingDone} className={`training-card training-${training.id}`} onClick={() => applyTraining(training)}>
+                <div className="training-card-top"><span className="training-icon"><FontAwesomeIcon icon={TRAINING_ICONS[training.id as keyof typeof TRAINING_ICONS]} /></span><div><small>{training.eyebrow}</small><strong>{training.title}</strong></div></div>
+                <p>{training.copy}</p>
+                <div className="training-effects">{Object.entries(training.gains).map(([key, gain]) => <b key={key}>+{gain} {ATTR_LABELS[key as AttrKey]}</b>)}<em className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{training.energy} energii</em></div>
               </button>
             ))}</div>
           </section>}
