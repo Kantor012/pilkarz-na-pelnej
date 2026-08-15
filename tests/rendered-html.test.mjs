@@ -241,22 +241,40 @@ test("coach builds a deterministic squad and explains lineup hierarchy", async (
   assert.ok(star.competitors.length > 0);
 });
 
-test("microcycle has diminishing returns, three slots and dynamic traits", async () => {
-  const { emptyDevelopmentState, selectMicrocycleSession, setDevelopmentIntensity, forecastSession, applyMicrocycle, applySeasonAging } = await gameModule("/game/development.ts");
-  const training = { id: "finish", attrs: { strzal: 1, technika: .3 }, energy: -12 };
-  const weights = { strzal: .26, technika: .16 };
+test("development workshop is uncertain, funded and always costs energy", async () => {
+  const { DEVELOPMENT_SUPPORT, emptyDevelopmentState, selectMicrocycleSession, setDevelopmentIntensity, setDevelopmentSupport, forecastSession, previewMicrocycle, applyMicrocycle, applySeasonAging } = await gameModule("/game/development.ts");
+  const finish = { id: "finish", attrs: { strzal: 1, technika: .3 }, energy: -12 };
+  const ball = { id: "ball", attrs: { technika: .8, drybling: .5 }, energy: -8 };
+  const trainings = [finish, ball];
+  const weights = { strzal: .26, technika: .16, drybling: .16 };
   let state = emptyDevelopmentState();
   state = selectMicrocycleSession(state, "finish", false);
   state = selectMicrocycleSession(state, "ball", false);
-  state = selectMicrocycleSession(state, "recovery", true);
   state = setDevelopmentIntensity(state, "mocny");
-  assert.deepEqual(state.plan, { main: "finish", supplementary: "ball", recovery: "recovery", intensity: "mocny" });
-  const fresh = forecastSession(state, training, 19, weights, "main");
-  const repeated = forecastSession({ ...state, recentSessions: Array(7).fill("finish") }, training, 19, weights, "main");
+  state = setDevelopmentSupport(state, "elite");
+  assert.deepEqual(state.plan, { main: "finish", supplementary: "ball", recovery: null, intensity: "mocny", support: "elite" });
+  const fresh = forecastSession(state, finish, 19, weights, "main");
+  const repeated = forecastSession({ ...state, recentSessions: Array(7).fill("finish") }, finish, 19, weights, "main");
   assert.ok(fresh.ovrGain > repeated.ovrGain);
+  assert.ok(fresh.range[0] < fresh.range[1]);
+  for (const intensity of ["lekki", "normalny", "mocny"]) {
+    for (const support of Object.keys(DEVELOPMENT_SUPPORT)) {
+      const plan = setDevelopmentSupport(setDevelopmentIntensity(state, intensity), support);
+      const preview = previewMicrocycle({ state: plan, trainings, age: 19, positionWeight: weights });
+      assert.ok(preview.energyDelta < 0, `${intensity}/${support} must end with negative energy`);
+    }
+  }
   const attrs = { technika: 60, strzal: 60, podania: 60, drybling: 60, odbior: 60, szybkosc: 60, sila: 60, kondycja: 60, refleks: 60 };
-  const result = applyMicrocycle({ state: { ...state, recentSessions: Array(6).fill("finish") }, trainings: [training, { id: "ball", attrs: { technika: .8 }, energy: -8 }, { id: "recovery", attrs: { kondycja: .2 }, energy: 20 }], attrs, age: 19, potential: 90, positionWeight: weights, professionalism: 70, facilities: 1 });
+  const input = { state: { ...state, recentSessions: Array(6).fill("finish") }, trainings, attrs, age: 19, potential: 90, positionWeight: weights, professionalism: 70, facilities: 1, seed: 5544, funds: 5000 };
+  const result = applyMicrocycle(input);
+  const replay = applyMicrocycle(input);
+  assert.deepEqual(result, replay);
+  assert.equal(result.moneyCost, DEVELOPMENT_SUPPORT.elite.cost);
+  assert.ok(result.energy < 0);
+  assert.ok(result.report.bankedProgress > 0);
   assert.ok(result.state.traits.includes("Łowca pola karnego"));
+  const noMoney = applyMicrocycle({ ...input, funds: 0 });
+  assert.equal(noMoney.moneyCost, 0);
   const aged = applySeasonAging(attrs, "Napastnik", 34, 90);
   assert.ok(aged.szybkosc < attrs.szybkosc);
 });

@@ -1,37 +1,100 @@
+import { hashSeed, nextRandom } from "./rng";
 import type { AttrKey, Attributes, Position } from "./types";
 
 export type DevelopmentIntensity = "lekki" | "normalny" | "mocny";
+export type DevelopmentSupportId = "club" | "analysis" | "personal" | "elite";
+export type TrainingResponse = "breakthrough" | "adaptation" | "plateau" | "overload";
+
 export interface TrainingDefinition { id: string; attrs: Partial<Attributes>; energy: number }
-export interface MicrocyclePlan { main: string | null; supplementary: string | null; recovery: string | null; intensity: DevelopmentIntensity }
+export interface MicrocyclePlan {
+  main: string | null;
+  supplementary: string | null;
+  /** Zachowane dla zgodności ze starszymi zapisami. Regenerację wybiera teraz pakiet wsparcia. */
+  recovery: string | null;
+  intensity: DevelopmentIntensity;
+  support: DevelopmentSupportId;
+}
+export interface DevelopmentReport {
+  response: TrainingResponse;
+  responseLabel: string;
+  summary: string;
+  attributeGains: Partial<Attributes>;
+  bankedProgress: number;
+  ovrGain: number;
+  energyDelta: number;
+  moneyCost: number;
+  injuryRisk: number;
+}
 export interface DevelopmentState {
   plan: MicrocyclePlan;
   recentSessions: string[];
   traits: string[];
   weeklyLoad: number;
   totalSessions: number;
+  adaptation: Partial<Record<AttrKey, number>>;
+  strain: number;
+  weekIndex: number;
+  lastReport: DevelopmentReport | null;
 }
 
-const INTENSITY = { lekki: { growth: .72, cost: .62 }, normalny: { growth: 1, cost: 1 }, mocny: { growth: 1.34, cost: 1.4 } } as const;
+export const DEVELOPMENT_SUPPORT: Record<DevelopmentSupportId, { label: string; copy: string; cost: number; recovery: number; learning: number; stability: number }> = {
+  club: { label: "Zaplecze klubowe", copy: "W cenie kontraktu. Fizjo ma kolejkę, ale zna twoje kolano.", cost: 0, recovery: 5, learning: 1, stability: 0 },
+  analysis: { label: "Analiza indywidualna", copy: "Nagrania, dane i mniej zgadywania. Podnosi szansę trafionej adaptacji.", cost: 180, recovery: 7, learning: 1.07, stability: .04 },
+  personal: { label: "Trener + fizjoterapeuta", copy: "Plan pod ciebie, nie pod 24 chłopa i pachołek bez powietrza.", cost: 550, recovery: 10, learning: 1.14, stability: .09 },
+  elite: { label: "Sztab premium", copy: "Diagnostyka, odnowa i człowiek, który zabiera telefon przed snem.", cost: 1200, recovery: 14, learning: 1.22, stability: .14 },
+};
+
+const INTENSITY = {
+  lekki: { growth: .72, cost: .72, load: 7 },
+  normalny: { growth: 1, cost: 1, load: 15 },
+  mocny: { growth: 1.28, cost: 1.32, load: 27 },
+} as const;
 const TRAITS: Array<{ id: string; session: string; count: number }> = [
   { id: "Klej w bucie", session: "ball", count: 7 }, { id: "Łowca pola karnego", session: "finish", count: 7 },
   { id: "Kieszonkowy reżyser", session: "passing", count: 7 }, { id: "Czyściciel", session: "defense", count: 7 },
   { id: "Pierwszy krok", session: "speed", count: 7 }, { id: "Żelazne płuca", session: "gym", count: 7 },
 ];
+const RESPONSE_LABELS: Record<TrainingResponse, string> = {
+  breakthrough: "PRZEŁOM", adaptation: "ADAPTACJA", plateau: "ZASTÓJ", overload: "PRZECIĄŻENIE",
+};
 
-export const emptyDevelopmentState = (): DevelopmentState => ({ plan: { main: null, supplementary: null, recovery: null, intensity: "normalny" }, recentSessions: [], traits: [], weeklyLoad: 0, totalSessions: 0 });
+export const emptyDevelopmentState = (): DevelopmentState => ({
+  plan: { main: null, supplementary: null, recovery: null, intensity: "normalny", support: "club" },
+  recentSessions: [], traits: [], weeklyLoad: 0, totalSessions: 0, adaptation: {}, strain: 0, weekIndex: 0, lastReport: null,
+});
+
+export function normalizeDevelopmentState(state?: Partial<DevelopmentState> | null): DevelopmentState {
+  const empty = emptyDevelopmentState();
+  return {
+    ...empty,
+    ...state,
+    plan: { ...empty.plan, ...(state?.plan ?? {}), support: state?.plan?.support ?? "club", recovery: null },
+    recentSessions: state?.recentSessions ?? [],
+    traits: state?.traits ?? [],
+    adaptation: state?.adaptation ?? {},
+    lastReport: state?.lastReport ?? null,
+  };
+}
 
 export function selectMicrocycleSession(state: DevelopmentState, trainingId: string, recovery = false) {
-  const plan = { ...state.plan };
-  if (recovery) plan.recovery = plan.recovery === trainingId ? null : trainingId;
-  else if (plan.main === trainingId) plan.main = null;
+  const current = normalizeDevelopmentState(state);
+  const plan = { ...current.plan };
+  if (recovery) return current;
+  if (plan.main === trainingId) plan.main = null;
   else if (plan.supplementary === trainingId) plan.supplementary = null;
   else if (!plan.main) plan.main = trainingId;
   else plan.supplementary = trainingId;
-  return { ...state, plan };
+  return { ...current, plan };
 }
 
 export function setDevelopmentIntensity(state: DevelopmentState, intensity: DevelopmentIntensity) {
-  return { ...state, plan: { ...state.plan, intensity } };
+  const current = normalizeDevelopmentState(state);
+  return { ...current, plan: { ...current.plan, intensity } };
+}
+
+export function setDevelopmentSupport(state: DevelopmentState, support: DevelopmentSupportId) {
+  const current = normalizeDevelopmentState(state);
+  return { ...current, plan: { ...current.plan, support } };
 }
 
 function ageMultiplier(age: number) {
@@ -44,42 +107,120 @@ function ageMultiplier(age: number) {
 
 function repetitionMultiplier(recent: string[], id: string) {
   const repeats = recent.slice(-8).filter((session) => session === id).length;
-  return Math.max(.42, 1 - repeats * .12);
+  return Math.max(.36, 1 - repeats * .12);
 }
 
 export function forecastSession(state: DevelopmentState, training: TrainingDefinition, age: number, positionWeight: Partial<Record<AttrKey, number>>, slot: "main" | "supplementary" | "recovery") {
-  const intensity = INTENSITY[state.plan.intensity];
-  const slotFactor = slot === "main" ? 1 : slot === "supplementary" ? .62 : .48;
-  const repetition = repetitionMultiplier(state.recentSessions, training.id);
-  const growth = intensity.growth * slotFactor * ageMultiplier(age) * repetition;
-  const ovrGain = Object.entries(training.attrs).reduce((sum, [key, gain]) => sum + (gain ?? 0) * (positionWeight[key as AttrKey] ?? 0) * growth, 0);
-  return { growth, ovrGain, energy: Math.round(training.energy * intensity.cost * (slot === "supplementary" ? .7 : slot === "recovery" ? .8 : 1)), repetition };
+  const current = normalizeDevelopmentState(state);
+  const intensity = INTENSITY[current.plan.intensity];
+  const support = DEVELOPMENT_SUPPORT[current.plan.support];
+  const slotFactor = slot === "main" ? 1 : slot === "supplementary" ? .64 : 0;
+  const repetition = repetitionMultiplier(current.recentSessions, training.id);
+  const growth = intensity.growth * slotFactor * ageMultiplier(age) * repetition * support.learning;
+  const expectedOvr = Object.entries(training.attrs).reduce((sum, [key, gain]) => sum + (gain ?? 0) * (positionWeight[key as AttrKey] ?? 0) * growth, 0);
+  const uncertainty = .42 + Math.min(.18, current.strain / 260);
+  const low = Math.max(0, expectedOvr * (1 - uncertainty));
+  const high = expectedOvr * (1.34 - support.stability);
+  return {
+    growth,
+    ovrGain: expectedOvr,
+    range: [low, high] as [number, number],
+    energy: Math.round(training.energy * intensity.cost * (slot === "supplementary" ? .72 : 1)),
+    repetition,
+    breakthroughChance: Math.round(Math.max(4, Math.min(24, 9 + support.stability * 55 + (1 - repetition) * 8 - current.strain * .08))),
+  };
 }
 
-export function applyMicrocycle(input: { state: DevelopmentState; trainings: TrainingDefinition[]; attrs: Attributes; age: number; potential: number; positionWeight: Partial<Record<AttrKey, number>>; professionalism: number; facilities: number }) {
-  const selected = (["main", "supplementary", "recovery"] as const).map((slot) => ({ slot, id: input.state.plan[slot] })).filter((item): item is { slot: "main" | "supplementary" | "recovery"; id: string } => Boolean(item.id));
+export function previewMicrocycle(input: { state: DevelopmentState; trainings: TrainingDefinition[]; age: number; positionWeight: Partial<Record<AttrKey, number>> }) {
+  const state = normalizeDevelopmentState(input.state);
+  const selected = (["main", "supplementary"] as const)
+    .map((slot) => ({ slot, id: state.plan[slot] }))
+    .filter((item): item is { slot: "main" | "supplementary"; id: string } => Boolean(item.id));
+  const forecasts = selected.flatMap(({ slot, id }) => {
+    const training = input.trainings.find((candidate) => candidate.id === id);
+    return training ? [forecastSession(state, training, input.age, input.positionWeight, slot)] : [];
+  });
+  const support = DEVELOPMENT_SUPPORT[state.plan.support];
+  const trainingEnergy = forecasts.reduce((sum, item) => sum + Math.min(0, item.energy), 0);
+  // Trening nie jest perpetuum mobile: po każdej jednostce tydzień zawsze kończy się deficytem energii.
+  const energyDelta = forecasts.length ? Math.min(-2, trainingEnergy + support.recovery) : 0;
+  const range = forecasts.reduce(([low, high], item) => [low + item.range[0], high + item.range[1]], [0, 0]);
+  const load = Math.min(100, Math.abs(trainingEnergy) * 2.1 + INTENSITY[state.plan.intensity].load + state.strain * .25 - support.recovery * .7);
+  const injuryRisk = Math.round(Math.max(1, Math.min(32, 2 + load * .16 + state.strain * .11 - support.stability * 35)));
+  return { energyDelta, range: range as [number, number], load: Math.round(load), injuryRisk, moneyCost: support.cost, sessions: forecasts.length };
+}
+
+function responseFor(state: DevelopmentState, seed: number, preview: ReturnType<typeof previewMicrocycle>) {
+  const support = DEVELOPMENT_SUPPORT[state.plan.support];
+  const first = nextRandom(hashSeed(`${seed}-${state.weekIndex}-${state.totalSessions}-${state.plan.main}-${state.plan.supplementary}-${state.plan.support}`));
+  const breakthrough = Math.max(.04, .09 + support.stability * .55 - state.strain * .0008);
+  const overload = Math.max(.02, preview.injuryRisk / 220 - support.stability * .08);
+  const plateau = Math.min(.34, .11 + state.strain * .0018 + (state.recentSessions.slice(-5).filter((id) => id === state.plan.main).length * .035));
+  const roll = first.value;
+  const response: TrainingResponse = roll < overload ? "overload" : roll < overload + plateau ? "plateau" : roll > 1 - breakthrough ? "breakthrough" : "adaptation";
+  const second = nextRandom(first.state);
+  const multiplier = response === "breakthrough" ? 1.36 + second.value * .22 : response === "adaptation" ? .76 + second.value * .34 : response === "plateau" ? .16 + second.value * .18 : .05 + second.value * .12;
+  return { response, multiplier };
+}
+
+export function applyMicrocycle(input: { state: DevelopmentState; trainings: TrainingDefinition[]; attrs: Attributes; age: number; potential: number; positionWeight: Partial<Record<AttrKey, number>>; professionalism: number; facilities: number; seed?: number; funds?: number }) {
+  const state = normalizeDevelopmentState(input.state);
+  const requestedSupport = DEVELOPMENT_SUPPORT[state.plan.support];
+  const affordableSupport = input.funds === undefined || input.funds >= requestedSupport.cost ? state.plan.support : "club";
+  const effectiveState = affordableSupport === state.plan.support ? state : { ...state, plan: { ...state.plan, support: affordableSupport } };
+  const preview = previewMicrocycle({ state: effectiveState, trainings: input.trainings, age: input.age, positionWeight: input.positionWeight });
+  const selected = (["main", "supplementary"] as const)
+    .map((slot) => ({ slot, id: effectiveState.plan[slot] }))
+    .filter((item): item is { slot: "main" | "supplementary"; id: string } => Boolean(item.id));
   const attrs = { ...input.attrs };
-  let energy = 0;
-  let ovrGain = 0;
+  const adaptation = { ...effectiveState.adaptation };
   const completed: string[] = [];
+  const attributeGains: Partial<Attributes> = {};
+  const response = responseFor(effectiveState, input.seed ?? 1, preview);
+  const environment = (.72 + input.professionalism / 250) * input.facilities;
+  let bankedProgress = 0;
   for (const selectedSession of selected) {
     const training = input.trainings.find((candidate) => candidate.id === selectedSession.id);
     if (!training) continue;
-    const forecast = forecastSession(input.state, training, input.age, input.positionWeight, selectedSession.slot);
-    const environment = (.72 + input.professionalism / 250) * input.facilities;
+    const forecast = forecastSession(effectiveState, training, input.age, input.positionWeight, selectedSession.slot);
     Object.entries(training.attrs).forEach(([key, gain]) => {
       const attr = key as AttrKey;
-      attrs[attr] = Math.min(input.potential, attrs[attr] + (gain ?? 0) * forecast.growth * environment);
+      const potentialRoom = Math.max(.08, Math.min(1, (input.potential - attrs[attr]) / 16));
+      const earned = (gain ?? 0) * forecast.growth * environment * response.multiplier * (.55 + potentialRoom * .45);
+      const bank = (adaptation[attr] ?? 0) + earned;
+      const wholePoints = Math.min(Math.max(0, Math.floor(bank)), Math.max(0, Math.floor(input.potential - attrs[attr])));
+      adaptation[attr] = bank - wholePoints;
+      if (wholePoints > 0) {
+        attrs[attr] = Math.min(input.potential, attrs[attr] + wholePoints);
+        attributeGains[attr] = (attributeGains[attr] ?? 0) + wholePoints;
+      }
+      bankedProgress += earned;
     });
-    energy += forecast.energy;
-    ovrGain += forecast.ovrGain * environment;
     completed.push(training.id);
   }
-  const recentSessions = [...input.state.recentSessions, ...completed].slice(-24);
-  const traits = [...input.state.traits];
+  const recentSessions = [...effectiveState.recentSessions, ...completed].slice(-24);
+  const traits = [...effectiveState.traits];
   for (const trait of TRAITS) if (!traits.includes(trait.id) && recentSessions.filter((id) => id === trait.session).length >= trait.count) traits.push(trait.id);
-  const weeklyLoad = Math.min(100, Math.abs(Math.min(0, energy)) * 2.4 + (input.state.plan.intensity === "mocny" ? 18 : input.state.plan.intensity === "normalny" ? 8 : 0));
-  return { attrs, energy, ovrGain, state: { plan: { main: null, supplementary: null, recovery: null, intensity: input.state.plan.intensity }, recentSessions, traits, weeklyLoad, totalSessions: input.state.totalSessions + completed.length } satisfies DevelopmentState };
+  const ovrGain = (Object.keys(attributeGains) as AttrKey[]).reduce((sum, key) => sum + (attributeGains[key] ?? 0) * (input.positionWeight[key] ?? 0), 0);
+  const nextStrain = Math.max(0, Math.min(100, effectiveState.strain * .56 + preview.load * .48 - DEVELOPMENT_SUPPORT[affordableSupport].recovery * .65));
+  const summaries: Record<TrainingResponse, string> = {
+    breakthrough: "Organizm odpowiedział ponad plan. Sztab udaje, że dokładnie to przewidział.",
+    adaptation: "Solidna robota. Część efektu trafiła do banku adaptacji i zaprocentuje później.",
+    plateau: "Bodziec był zbyt znajomy. Jest postęp procesu, ale tablica wyników jeszcze go nie pokazuje.",
+    overload: "Plan wszedł za mocno. Rozwój minimalny, zmęczenie całkiem profesjonalne.",
+  };
+  const report: DevelopmentReport = {
+    response: response.response, responseLabel: RESPONSE_LABELS[response.response], summary: summaries[response.response], attributeGains,
+    bankedProgress, ovrGain, energyDelta: preview.energyDelta, moneyCost: DEVELOPMENT_SUPPORT[affordableSupport].cost, injuryRisk: preview.injuryRisk,
+  };
+  return {
+    attrs, energy: preview.energyDelta, ovrGain, moneyCost: report.moneyCost, report,
+    state: {
+      plan: { main: null, supplementary: null, recovery: null, intensity: effectiveState.plan.intensity, support: effectiveState.plan.support },
+      recentSessions, traits, weeklyLoad: preview.load, totalSessions: effectiveState.totalSessions + completed.length,
+      adaptation, strain: nextStrain, weekIndex: effectiveState.weekIndex + 1, lastReport: report,
+    } satisfies DevelopmentState,
+  };
 }
 
 export function applySeasonAging(attrs: Attributes, position: Position, age: number, potential: number) {
