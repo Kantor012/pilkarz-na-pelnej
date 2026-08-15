@@ -78,6 +78,17 @@ test("timing minigame rewards stopping inside the visible target", async () => {
   assert.match(timingPromptForAction("drybling"), /rytm/);
 });
 
+test("normal match pace advances five minutes per second at x1", async () => {
+  const { ballTransitionDurationMs, matchMinuteDurationMs, matchMinutesPerSecond } = await gameModule("/game/match-pacing.ts");
+  assert.equal(matchMinutesPerSecond(1), 5);
+  assert.equal(matchMinutesPerSecond(2), 10);
+  assert.equal(matchMinutesPerSecond(4), 20);
+  assert.equal(matchMinuteDurationMs("running", 1), 200);
+  assert.equal(matchMinuteDurationMs("running", 4), 50);
+  assert.equal(ballTransitionDurationMs("running", 1), 200);
+  assert.equal(matchMinuteDurationMs("warning", 1), 1250);
+});
+
 test("engine permits zero opportunities and never exceeds seven", async () => {
   const { createWorld } = await gameModule("/game/world.ts");
   const { createMatch } = await gameModule("/game/match-engine.ts");

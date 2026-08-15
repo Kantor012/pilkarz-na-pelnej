@@ -27,6 +27,7 @@ import { acceptTransfer, createMarketState, generateTransferOffers, negotiateOff
 import { advanceCompetitionsWeek, competitionRoundLabel, createCompetitions, getPlayerCompetitionFixture, getPlayerNationalFixture, recordPlayerCompetitionResult, updateCallUp } from "../game/competitions";
 import { addSeasonArchive, addWeeklyEvent, defaultMetaGame, patchSettings, updateAchievements } from "../game/meta-game";
 import { migrateLegacyCareerV2, type CareerSaveV3 } from "../game/migrations";
+import { matchMinuteDurationMs, matchMinutesPerSecond } from "../game/match-pacing";
 import type {
   AttrKey, Attributes, ClubProfile, CountryCode, MatchSimulationState,
   Position, SaveGameV3, WorldState,
@@ -141,7 +142,10 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
 
   useEffect(() => {
     if (!match || paused || (match.phase !== "running" && match.phase !== "warning")) return;
-    const timer = window.setTimeout(() => setMatch((current) => current ? advanceMatch(current, 1) : current), match.phase === "warning" ? 1250 : 900 / match.speed);
+    const timer = window.setTimeout(
+      () => setMatch((current) => current ? advanceMatch(current, 1) : current),
+      matchMinuteDurationMs(match.phase, match.speed),
+    );
     return () => window.clearTimeout(timer);
   }, [match, paused]);
 
@@ -327,7 +331,7 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
           {match.phase === "opportunity" && opportunity && ready && <div className="v3-action-overlay"><h2>{timingPromptForAction(opportunity.actionType)}</h2><TimingMiniGame opportunity={opportunity} skillLabel={ATTR_LABELS[opportunity.skill]} reducedMotion={activeSettings.reducedMotion} onDone={(quality) => { setMatch(submitAction(match, opportunity.id, quality)); setReady(false); }} /></div>}
           {match.phase === "resolved" && match.resolved && <div className={`v3-action-overlay v3-result ${match.resolved.success ? "success" : "fail"}`}><p className="micro-label">JAKOŚĆ MINIGRY {match.resolved.quality}/100</p><h1>{match.resolved.success ? "AKCJA UDANA" : "TYM RAZEM NIE WYSZŁO"}</h1><p>{match.resolved.text}</p><div className="v3-exact"><b>Dokładna szansa: {match.resolved.chance}%</b><span>Rzut: {match.resolved.roll}</span></div><small>{match.resolved.factors.join(" • ")}</small><button className="v3-primary" onClick={() => setMatch(continueAfterAction(match))}>GRAMY DALEJ <FontAwesomeIcon icon={faArrowRight} /></button></div>}
           {match.phase === "finished" && <div className="v3-action-overlay"><p className="micro-label">KONIEC MECZU</p><h1>{match.scoreHome > match.scoreAway ? "SZATNIA ŚPIEWA. NIE RÓWNO, ALE GŁOŚNO." : match.scoreHome === match.scoreAway ? "REMIS. KSIĘGOWY ZADOWOLONY." : "PREZES JUŻ SZUKA WINNEGO."}</h1><div className="v3-final-score">{match.scoreHome}:{match.scoreAway}</div><p>{match.stats.attempts} interaktywnych akcji • ocena {match.rating.toFixed(1)}</p><button className="v3-primary" disabled={simulatingWorld} onClick={() => void finishMatch()}>{simulatingWorld ? "ŚWIAT LICZY TABELKI…" : "WRACAM DO KARIERY"}</button></div>}
-          <div className="v3-speed"><button onClick={() => setPaused(!paused)}><FontAwesomeIcon icon={paused ? faPlay : faPause} /></button>{([1,2,4] as const).map((speed) => <button key={speed} className={match.speed === speed ? "active" : ""} onClick={() => setMatch(setMatchSpeed(match, speed))}>×{speed}</button>)}</div>
+          <div className="v3-speed"><button onClick={() => setPaused(!paused)}><FontAwesomeIcon icon={paused ? faPlay : faPause} /></button>{([1,2,4] as const).map((speed) => <button key={speed} className={match.speed === speed ? "active" : ""} title={`${matchMinutesPerSecond(speed)} minut meczu na sekundę`} onClick={() => setMatch(setMatchSpeed(match, speed))}>×{speed}</button>)}</div>
         </section>
         <aside className="v3-commentary"><p className="micro-label">RADIO BOISKOWE</p><h3>Minuta po minucie</h3>{match.events.slice(0, 9).map((event) => <p key={event.id} className={event.type === "goal" ? "goal" : ""}>{event.text}</p>)}</aside>
       </section>

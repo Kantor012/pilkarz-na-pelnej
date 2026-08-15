@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { MatchSimulationState } from "../game/types";
+import { ballTransitionDurationMs } from "../game/match-pacing";
 
 type BallPoint = { x: number; y: number };
 type Frame = { ball: BallPoint; startedAt: number; minute: number };
@@ -69,7 +70,7 @@ export default function MatchPitch({ match, reducedMotion = false }: { match: Ma
 
       const from = previous.current.ball;
       const to = next.current.ball;
-      const duration = match.phase === "running" ? Math.max(210, 850 / match.speed) : match.phase === "warning" ? 1100 : 480;
+      const duration = ballTransitionDurationMs(match.phase, match.speed);
       const rawProgress = reducedMotion ? 1 : Math.min(1, Math.max(0, (now - next.current.startedAt) / duration));
       const progress = .5 - Math.cos(rawProgress * Math.PI) / 2;
       const distance = Math.hypot(to.x - from.x, to.y - from.y);
