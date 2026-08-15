@@ -869,17 +869,17 @@ body { background:#071019; }
 .career-console .training-effects b,.career-console .training-effects em { padding:4px 6px; font-size:6.5px; line-height:1.15; }
 
 @media (min-width:1181px) and (max-height:850px) {
-  .career-console .training-section.focused-section { padding:14px; }
-  .career-console .training-section-title { margin-bottom:9px; }
-  .career-console .training-section-title h3 { margin-top:3px; font-size:16px; }
-  .career-console .training-card { gap:5px; padding:10px; }
-  .career-console .training-icon { flex-basis:34px; width:34px; height:34px; font-size:14px; }
-  .career-console .training-card-top { gap:8px; }
-  .career-console .training-card-top strong { font-size:10px; }
-  .career-console .training-card-top small { font-size:6.5px; }
-  .career-console .training-card>p { margin-bottom:2px; -webkit-line-clamp:1; font-size:7.5px; }
-  .career-console .training-ovr-impact { padding:3px 5px; font-size:6px; }
-  .career-console .training-effects b,.career-console .training-effects em { padding:3px 5px; font-size:6px; }
+  .career-console .training-section.focused-section { padding:15px; }
+  .career-console .training-section-title { margin-bottom:10px; }
+  .career-console .training-section-title h3 { margin-top:3px; font-size:18px; }
+  .career-console .training-card { gap:8px; padding:13px; }
+  .career-console .training-icon { flex-basis:40px; width:40px; height:40px; font-size:17px; }
+  .career-console .training-card-top { gap:11px; }
+  .career-console .training-card-top strong { font-size:12px; }
+  .career-console .training-card-top small { font-size:7.5px; }
+  .career-console .training-card>p { margin-bottom:3px; -webkit-line-clamp:2; font-size:9px; line-height:1.4; }
+  .career-console .training-ovr-impact { padding:5px 7px; font-size:7.5px; }
+  .career-console .training-effects b,.career-console .training-effects em { padding:5px 7px; font-size:7px; }
 }
 
 @media (max-width:1180px) and (min-width:761px) {
