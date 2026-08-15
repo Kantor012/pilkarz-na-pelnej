@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faArrowRight, faArrowsLeftRight, faBed, faBolt, faBullseye, faCalendarDays, faChartLine,
@@ -9,6 +9,7 @@ import {
   faTrophy, faUser, faUsers, faWandMagicSparkles,
 } from "@fortawesome/free-solid-svg-icons";
 import MatchPitch from "./MatchPitch";
+import TimingMiniGame, { timingPromptForAction } from "./TimingMiniGame";
 import { SaveRepository } from "../game/save-repository";
 import { CloudSaveRepository } from "../game/cloud-save";
 import {
@@ -27,7 +28,7 @@ import { advanceCompetitionsWeek, competitionRoundLabel, createCompetitions, get
 import { addSeasonArchive, addWeeklyEvent, defaultMetaGame, patchSettings, updateAchievements } from "../game/meta-game";
 import { migrateLegacyCareerV2, type CareerSaveV3 } from "../game/migrations";
 import type {
-  AttrKey, Attributes, ClubProfile, CountryCode, InteractiveOpportunity, MatchSimulationState,
+  AttrKey, Attributes, ClubProfile, CountryCode, MatchSimulationState,
   Position, SaveGameV3, WorldState,
 } from "../game/types";
 
@@ -92,48 +93,6 @@ function initialAttributes(position: Position, target: number, style: string): A
   const correction = target - calculateOvr(position, attrs);
   (Object.keys(attrs) as AttrKey[]).forEach((key) => { attrs[key] = clamp(attrs[key] + correction, 18, 78); });
   return attrs;
-}
-
-function MiniGame({ opportunity, onDone }: { opportunity: InteractiveOpportunity; onDone: (quality: number) => void }) {
-  const [phase, setPhase] = useState<"preview" | "play">(opportunity.kind === "choice" || opportunity.kind === "sequence" ? "preview" : "play");
-  const [entered, setEntered] = useState<number[]>([]);
-  const [reactionReady, setReactionReady] = useState(false);
-  const mountedAt = useRef(0);
-  const seed = [...opportunity.id].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const target = seed % 3;
-  const sequence = useMemo(() => Array.from({ length: 4 }, (_, index) => (seed + index * 7) % 4), [seed]);
-  useEffect(() => { mountedAt.current = performance.now(); }, []);
-  useEffect(() => {
-    if (phase !== "preview") return;
-    const timer = window.setTimeout(() => setPhase("play"), 1100);
-    return () => window.clearTimeout(timer);
-  }, [phase]);
-  useEffect(() => {
-    if (opportunity.kind !== "reaction") return;
-    const delay = 650 + (seed % 900);
-    const timer = window.setTimeout(() => { mountedAt.current = performance.now(); setReactionReady(true); }, delay);
-    return () => window.clearTimeout(timer);
-  }, [opportunity.kind, seed]);
-
-  const clickTiming = () => {
-    const cycle = ((performance.now() - mountedAt.current) % 1800) / 1800;
-    const cursor = cycle <= .5 ? cycle * 2 : 2 - cycle * 2;
-    onDone(clamp(100 - Math.abs(cursor - .5) * 190));
-  };
-  const enterSequence = (value: number) => {
-    const next = [...entered, value];
-    setEntered(next);
-    const wrong = next.some((item, index) => item !== sequence[index]);
-    if (wrong) onDone(Math.max(6, 42 - next.length * 7));
-    else if (next.length === sequence.length) onDone(96);
-  };
-  return <div className="v3-minigame">
-    <div className="v3-mini-heading"><span>MINIGRA • {opportunity.actionType.toUpperCase()}</span><strong>{ATTR_LABELS[opportunity.skill]}</strong></div>
-    {opportunity.kind === "timing" && <><div className="v3-timing"><i /><b /></div><button onClick={clickTiming}>TERAZ!</button></>}
-    {opportunity.kind === "choice" && <div className="v3-choice">{["LEWO", "ŚRODEK", "PRAWO"].map((label, index) => <button key={label} className={phase === "preview" && index === target ? "preview" : ""} disabled={phase === "preview"} onClick={() => onDone(index === target ? 94 : 14)}>{phase === "preview" && index === target ? "CEL" : label}</button>)}</div>}
-    {opportunity.kind === "sequence" && <><div className="v3-sequence-preview">{phase === "preview" ? sequence.map((value, index) => <kbd key={index}>{["↑", "→", "↓", "←"][value]}</kbd>) : <span>POWTÓRZ SEKWENCJĘ • {entered.length}/4</span>}</div>{phase === "play" && <div className="v3-choice">{["↑", "→", "↓", "←"].map((label, index) => <button key={label} onClick={() => enterSequence(index)}>{label}</button>)}</div>}</>}
-    {opportunity.kind === "reaction" && <button className={reactionReady ? "reaction-ready" : ""} disabled={!reactionReady} onClick={() => onDone(clamp(108 - (performance.now() - mountedAt.current) / 7))}>{reactionReady ? "REAGUJ!" : "CZEKAJ…"}</button>}
-  </div>;
 }
 
 export default function CareerGame() {
@@ -363,9 +322,9 @@ export default function CareerGame() {
       <section className="v3-match-grid">
         <aside className="v3-match-sidebar"><p className="micro-label">TWÓJ STATUS</p><h2>{roleLabel(match.playerRole)}</h2><div className="v3-rating"><span>OCENA</span><strong>{match.rating.toFixed(1)}</strong></div><dl><div><dt>Gole</dt><dd>{match.stats.goals}</dd></div><div><dt>Asysty</dt><dd>{match.stats.assists}</dd></div><div><dt>Obrony</dt><dd>{match.stats.saves}</dd></div><div><dt>Odbiory</dt><dd>{match.stats.tackles}</dd></div></dl><p>{match.playerRole === "bench" && match.minute < match.playerStartMinute ? `Trener planuje zmianę około ${match.playerStartMinute}. minuty.` : match.playerRole === "out" ? "Dziś oglądasz z trybun. To też jest prawidłowy wynik kariery." : `Na boisku do około ${match.playerEndMinute}. minuty.`}</p></aside>
         <section className="v3-pitch-stage">{activeSettings.textMatch ? <div className="v3-text-match"><strong>{match.minute}′ • {match.scoreHome}:{match.scoreAway}</strong><p>{match.events[0]?.text}</p><small>Tryb tekstowy — symulacja i minigry pozostają identyczne.</small></div> : <MatchPitch match={match} reducedMotion={activeSettings.reducedMotion} />}
-          {match.phase === "warning" && opportunity && <div className="v3-warning"><span>ZA CHWILĘ • {opportunity.minute}′</span><strong>{opportunity.title}</strong><p>{opportunity.prompt} • {ATTR_LABELS[opportunity.skill]} • szansa po dobrym wykonaniu {chance?.[0]}–{chance?.[1]}%</p></div>}
+          {match.phase === "warning" && opportunity && <div className="v3-warning"><span>ZA CHWILĘ • {opportunity.minute}′</span><strong>{opportunity.title}</strong><p>{timingPromptForAction(opportunity.actionType)} • {ATTR_LABELS[opportunity.skill]} • szansa po dobrym wykonaniu {chance?.[0]}–{chance?.[1]}%</p></div>}
           {match.phase === "opportunity" && opportunity && !ready && <div className="v3-action-overlay"><p className="micro-label">AKCJA INTERAKTYWNA • {opportunity.minute}′</p><h1>{opportunity.title}</h1><p>{opportunity.flavor}</p><div className="v3-action-facts"><span><b>{ATTR_LABELS[opportunity.skill]}</b> kluczowy atrybut</span><span><b>{chance?.[0]}–{chance?.[1]}%</b> po świetnej minigrze</span></div><button className="v3-primary" onClick={() => setReady(true)}><FontAwesomeIcon icon={faCirclePlay} /> JESTEM GOTOWY</button></div>}
-          {match.phase === "opportunity" && opportunity && ready && <div className="v3-action-overlay"><h2>{opportunity.prompt}</h2><MiniGame opportunity={opportunity} onDone={(quality) => { setMatch(submitAction(match, opportunity.id, quality)); setReady(false); }} /></div>}
+          {match.phase === "opportunity" && opportunity && ready && <div className="v3-action-overlay"><h2>{timingPromptForAction(opportunity.actionType)}</h2><TimingMiniGame opportunity={opportunity} skillLabel={ATTR_LABELS[opportunity.skill]} reducedMotion={activeSettings.reducedMotion} onDone={(quality) => { setMatch(submitAction(match, opportunity.id, quality)); setReady(false); }} /></div>}
           {match.phase === "resolved" && match.resolved && <div className={`v3-action-overlay v3-result ${match.resolved.success ? "success" : "fail"}`}><p className="micro-label">JAKOŚĆ MINIGRY {match.resolved.quality}/100</p><h1>{match.resolved.success ? "AKCJA UDANA" : "TYM RAZEM NIE WYSZŁO"}</h1><p>{match.resolved.text}</p><div className="v3-exact"><b>Dokładna szansa: {match.resolved.chance}%</b><span>Rzut: {match.resolved.roll}</span></div><small>{match.resolved.factors.join(" • ")}</small><button className="v3-primary" onClick={() => setMatch(continueAfterAction(match))}>GRAMY DALEJ <FontAwesomeIcon icon={faArrowRight} /></button></div>}
           {match.phase === "finished" && <div className="v3-action-overlay"><p className="micro-label">KONIEC MECZU</p><h1>{match.scoreHome > match.scoreAway ? "SZATNIA ŚPIEWA. NIE RÓWNO, ALE GŁOŚNO." : match.scoreHome === match.scoreAway ? "REMIS. KSIĘGOWY ZADOWOLONY." : "PREZES JUŻ SZUKA WINNEGO."}</h1><div className="v3-final-score">{match.scoreHome}:{match.scoreAway}</div><p>{match.stats.attempts} interaktywnych akcji • ocena {match.rating.toFixed(1)}</p><button className="v3-primary" disabled={simulatingWorld} onClick={() => void finishMatch()}>{simulatingWorld ? "ŚWIAT LICZY TABELKI…" : "WRACAM DO KARIERY"}</button></div>}
           <div className="v3-speed"><button onClick={() => setPaused(!paused)}><FontAwesomeIcon icon={paused ? faPlay : faPause} /></button>{([1,2,4] as const).map((speed) => <button key={speed} className={match.speed === speed ? "active" : ""} onClick={() => setMatch(setMatchSpeed(match, speed))}>×{speed}</button>)}</div>
@@ -404,7 +363,7 @@ export default function CareerGame() {
         {career.retired && <div className="v3-retired"><FontAwesomeIcon icon={faTrophy}/><div><strong>KARIERA ZAKOŃCZONA W WIEKU {career.age} LAT</strong><p>Wyniki, sezony i osiągnięcia pozostają w archiwum. Kolana proszą, żeby nie klikać kolejnego meczu.</p></div></div>}
         {view === "market" && market.offers.length > 0 && <div className="v3-negotiation-strip"><span>AGENT MOŻE NEGOCJOWAĆ KAŻDĄ OFERTĘ MAKSYMALNIE 2 RAZY</span>{market.offers.map((offer) => <button key={offer.id} disabled={(offer.negotiationRound ?? 0) >= 2 || offer.interest <= 15} onClick={() => setCareer({ ...career, market: negotiateOffer(market, offer.id) })}>{world.clubs[offer.clubId].short}: NEGOCJUJ {offer.negotiationRound ?? 0}/2</button>)}</div>}
         {meta.tutorialStep < 3 && <aside className="v3-tutorial"><div><span>SZYBKA ODPRAWA {meta.tutorialStep + 1}/3</span><strong>{["Trening buduje atrybuty, ale zabiera energię.","Trener wybiera skład według OVR, formy i zaufania.","W meczu poczekaj na zapowiedź i kliknij „Jestem gotowy”."][meta.tutorialStep]}</strong></div><button onClick={() => setCareer({ ...career, meta: { ...meta, tutorialStep: meta.tutorialStep + 1 } })}>{meta.tutorialStep === 2 ? "ROZUMIEM" : "DALEJ"}</button></aside>}
-        {view === "home" && <><div className="v3-view-title"><p className="micro-label">CENTRUM KARIERY</p><h2>Jedna decyzja naraz. Resztę liczy świat.</h2></div><section className="v3-hero-card"><div><p className="micro-label">NAJWAŻNIEJSZE TERAZ</p><h3>{career.trainingDone ? "Plan wykonany. Czas sprawdzić decyzję trenera." : "Masz trening przed kolejną kolejką."}</h3><p>{opponent ? `Rywal: ${opponent.name}, siła ${opponent.strength.toFixed(1)}. Występ zależy od OVR, formy i zaufania.` : "Terminarz czeka na kolejną kolejkę."}</p><button onClick={() => setView("training")}>{career.trainingDone ? "ZOBACZ TRENING" : "WYBIERAM TRENING"}</button></div><div className="v3-kpis"><article><FontAwesomeIcon icon={faStar} /><span>OVR</span><strong>{playerOvr.toFixed(1)}</strong></article><article><FontAwesomeIcon icon={faGaugeHigh} /><span>FORMA</span><strong>{Math.round((career.energy + career.morale) / 2)}%</strong></article><article><FontAwesomeIcon icon={faClock} /><span>MECZE</span><strong>{career.totals.matches}</strong></article><article><FontAwesomeIcon icon={faCoins} /><span>KONTO</span><strong>{career.money} zł</strong></article></div></section><section className="v3-engine-note"><FontAwesomeIcon icon={faChartLine} /><div><strong>NOWY SILNIK MECZU</strong><p>90 minut, niezależne gole zespołów, 0–7 okazji gracza, ławka i brak występu. Każda minigra zwraca jakość 0–100.</p></div></section></>}
+        {view === "home" && <><div className="v3-view-title"><p className="micro-label">CENTRUM KARIERY</p><h2>Jedna decyzja naraz. Resztę liczy świat.</h2></div><section className="v3-hero-card"><div><p className="micro-label">NAJWAŻNIEJSZE TERAZ</p><h3>{career.trainingDone ? "Plan wykonany. Czas sprawdzić decyzję trenera." : "Masz trening przed kolejną kolejką."}</h3><p>{opponent ? `Rywal: ${opponent.name}, siła ${opponent.strength.toFixed(1)}. Występ zależy od OVR, formy i zaufania.` : "Terminarz czeka na kolejną kolejkę."}</p><button onClick={() => setView("training")}>{career.trainingDone ? "ZOBACZ TRENING" : "WYBIERAM TRENING"}</button></div><div className="v3-kpis"><article><FontAwesomeIcon icon={faStar} /><span>OVR</span><strong>{playerOvr.toFixed(1)}</strong></article><article><FontAwesomeIcon icon={faGaugeHigh} /><span>FORMA</span><strong>{Math.round((career.energy + career.morale) / 2)}%</strong></article><article><FontAwesomeIcon icon={faClock} /><span>MECZE</span><strong>{career.totals.matches}</strong></article><article><FontAwesomeIcon icon={faCoins} /><span>KONTO</span><strong>{career.money} zł</strong></article></div></section><section className="v3-engine-note"><FontAwesomeIcon icon={faChartLine} /><div><strong>NOWY SILNIK MECZU</strong><p>90 minut, płynny ruch piłki i 0–7 okazji gracza. Każda akcja korzysta z minigry czasowej, a wykonanie daje jakość 0–100.</p></div></section></>}
         {view === "player" && <><div className="v3-view-title"><p className="micro-label">KARTA ZAWODNIKA</p><h2>Co naprawdę buduje OVR {playerOvr.toFixed(1)}?</h2></div><div className="v3-attributes">{(Object.keys(career.player.attrs) as AttrKey[]).map((key) => { const priority = priorities.indexOf(key); return <article key={key} className={priority >= 0 ? `priority p${priority + 1}` : ""}><FontAwesomeIcon icon={ATTR_ICONS[key]} /><div><span>{ATTR_LABELS[key]} {priority >= 0 && <small>P{priority + 1}</small>}</span><strong>{career.player.attrs[key].toFixed(1)}</strong></div><i><b style={{ width: `${career.player.attrs[key]}%` }} /></i><em>{Math.round((WEIGHTS[career.player.position][key] ?? 0) * 100)}% OVR pozycji</em></article>; })}</div></>}
         {view === "club" && <><div className="v3-view-title"><p className="micro-label">SZATNIA • {squad.coach.formation} • {squad.coach.mentality.toUpperCase()}</p><h2>{squad.coach.name} ustala hierarchię.</h2></div><section className="v3-selection"><div className={`v3-selection-status role-${lineupDecision.role}`}><small>PROGNOZA NA MECZ</small><strong>{lineupDecision.role === "starter" ? "PIERWSZY SKŁAD" : lineupDecision.role === "bench" ? `ŁAWKA • WEJŚCIE OK. ${lineupDecision.predictedMinute}′` : "POZA KADRĄ"}</strong><p>{lineupDecision.reasons.join(" • ")}</p></div><div className="v3-coach"><span>TRENER</span><b>{squad.coach.name}</b><small>rygor {squad.coach.strictness}% • rotacja {squad.coach.rotation}%</small></div></section><div className="v3-squad-table"><header><span>ZAWODNIK</span><span>POZ.</span><span>OVR</span><span>FORMA</span><span>ZDROWIE</span><span>ROLA</span></header><div className="you"><span>{career.player.name}</span><span>{career.player.position}</span><b>{playerOvr.toFixed(1)}</b><span>{Math.round((career.energy+career.morale)/2)}</span><span>{availability.injuryWeeks ? `${availability.injuryWeeks} tyg.` : "100%"}</span><strong># {lineupDecision.positionRank}</strong></div>{squad.members.sort((a,b) => b.ovr-a.ovr).map((member) => <div key={member.id}><span>{member.name}</span><span>{member.position}</span><b>{member.ovr.toFixed(1)}</b><span>{Math.round(member.form)}</span><span>{member.injuryWeeks ? `${member.injuryWeeks} tyg.` : `${Math.round(member.fitness)}%`}</span><strong>{member.squadStatus}</strong></div>)}</div></>}
         {view === "player" && <div className="v3-traits"><span>CECHY SPECJALNE</span>{(career.development?.traits.length ? career.development.traits : ["Jeszcze żadnej — zachowania budują profil"]).map((trait) => <b key={trait}>{trait}</b>)}</div>}

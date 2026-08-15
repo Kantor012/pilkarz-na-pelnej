@@ -63,9 +63,19 @@ test("same seed and input create an identical deterministic match", async () => 
 });
 
 test("match library covers every promised interactive action family", async () => {
-  const { availableActionTypes } = await gameModule("/game/match-engine.ts");
+  const { availableActionTypes, availableGameKinds } = await gameModule("/game/match-engine.ts");
   const available = new Set(availableActionTypes());
   for (const action of ["przyjęcie", "podanie", "podanie prostopadłe", "drybling", "dośrodkowanie", "strzał", "główka", "odbiór", "przechwyt", "krycie", "parada", "wyjście do piłki", "wznowienie"]) assert.ok(available.has(action), `missing ${action}`);
+  assert.deepEqual(availableGameKinds(), ["timing"]);
+});
+
+test("timing minigame rewards stopping inside the visible target", async () => {
+  const { timingPromptForAction, timingScore } = await gameModule("/app/TimingMiniGame.tsx");
+  assert.equal(timingScore(50, 50, 16), 100);
+  assert.ok(timingScore(45, 50, 16) >= 80);
+  assert.ok(timingScore(5, 50, 16) < 30);
+  assert.match(timingPromptForAction("strzał"), /siłę, kierunek i podkręcenie/);
+  assert.match(timingPromptForAction("drybling"), /rytm/);
 });
 
 test("engine permits zero opportunities and never exceeds seven", async () => {

@@ -31,39 +31,43 @@ type OpportunityTemplate = {
 
 const OPPORTUNITY_LIBRARY: Record<Position, OpportunityTemplate[]> = {
   Bramkarz: [
-    { title: "Strzał spod lady", flavor: "Napastnik wyskoczył sam. Ktoś z obrony właśnie udaje, że wiąże but.", prompt: "Przygotuj się na paradę refleksu", actionType: "parada", kind: "reaction", skill: "refleks", effect: "save", failConcedes: true },
-    { title: "Sam na sam i samotność", flavor: "Skróć kąt, nie godność.", prompt: "Zapamiętaj sekwencję wyjścia", actionType: "wyjście do piłki", kind: "sequence", skill: "technika", effect: "save", failConcedes: true },
-    { title: "Karny po konsultacji z bufetem", flavor: "Strzelec patrzy w róg trochę zbyt demonstracyjnie.", prompt: "Odczytaj kierunek strzału", actionType: "rzut karny", kind: "choice", skill: "refleks", effect: "save", failConcedes: true },
-    { title: "Wznowienie z ambicją", flavor: "Jedno podanie może uruchomić kontrę albo dział reklamacji.", prompt: "Wybierz wolny korytarz", actionType: "wznowienie", kind: "choice", skill: "podania", effect: "assist", failConcedes: false },
+    { title: "Strzał spod lady", flavor: "Napastnik wyskoczył sam. Ktoś z obrony właśnie udaje, że wiąże but.", prompt: "Wyczuj kierunek i moment parady", actionType: "parada", kind: "timing", skill: "refleks", effect: "save", failConcedes: true },
+    { title: "Sam na sam i samotność", flavor: "Skróć kąt, nie godność.", prompt: "Wyczuj kierunek i moment wyjścia", actionType: "wyjście do piłki", kind: "timing", skill: "technika", effect: "save", failConcedes: true },
+    { title: "Karny po konsultacji z bufetem", flavor: "Strzelec patrzy w róg trochę zbyt demonstracyjnie.", prompt: "Odczytaj kierunek i zatrzymaj moment parady", actionType: "rzut karny", kind: "timing", skill: "refleks", effect: "save", failConcedes: true },
+    { title: "Wznowienie z ambicją", flavor: "Jedno podanie może uruchomić kontrę albo dział reklamacji.", prompt: "Ustaw tempo, kierunek i siłę wznowienia", actionType: "wznowienie", kind: "timing", skill: "podania", effect: "assist", failConcedes: false },
     { title: "Bomba pod poprzeczkę", flavor: "Piłka leci tam, gdzie rękawice mają najdalej.", prompt: "Zatrzymaj znacznik w strefie parady", actionType: "parada", kind: "timing", skill: "refleks", effect: "save", failConcedes: true },
   ],
   Obrońca: [
-    { title: "Krycie człowiek w człowieka i reklamę w reklamę", flavor: "Napastnik próbuje zgubić cię ruchem bez piłki.", prompt: "Utrzymaj właściwy dystans", actionType: "krycie", kind: "sequence", skill: "odbior", effect: "tackle", failConcedes: true },
+    { title: "Krycie człowiek w człowieka i reklamę w reklamę", flavor: "Napastnik próbuje zgubić cię ruchem bez piłki.", prompt: "Wyczuj dystans i moment doskoku", actionType: "krycie", kind: "timing", skill: "odbior", effect: "tackle", failConcedes: true },
     { title: "Wślizg ostatniej faktury", flavor: "Napastnik wychodzi na czystą pozycję.", prompt: "Traf w moment odbioru", actionType: "odbiór", kind: "timing", skill: "odbior", effect: "tackle", failConcedes: true },
-    { title: "Piłka między liniami", flavor: "Przechwyć ją, zanim komentator powie „ale przestrzeń”.", prompt: "Zareaguj na podanie", actionType: "przechwyt", kind: "reaction", skill: "refleks", effect: "tackle", failConcedes: false },
-    { title: "Wyprowadzenie bez instrukcji", flavor: "Pressing rywala pachnie kłopotami i energetykiem.", prompt: "Powtórz sekwencję wyjścia", actionType: "wyprowadzenie", kind: "sequence", skill: "technika", effect: "progression", failConcedes: true },
+    { title: "Piłka między liniami", flavor: "Przechwyć ją, zanim komentator powie „ale przestrzeń”.", prompt: "Zatrzymaj moment przechwytu", actionType: "przechwyt", kind: "timing", skill: "refleks", effect: "tackle", failConcedes: false },
+    { title: "Wyprowadzenie bez instrukcji", flavor: "Pressing rywala pachnie kłopotami i energetykiem.", prompt: "Ustaw tempo, kierunek i siłę wyprowadzenia", actionType: "wyprowadzenie", kind: "timing", skill: "technika", effect: "progression", failConcedes: true },
     { title: "Główka po rożnym", flavor: "Możesz wybić albo zostać elementem skrótu meczu.", prompt: "Wygraj pojedynek w powietrzu", actionType: "główka", kind: "timing", skill: "sila", effect: "tackle", failConcedes: true },
-    { title: "Podanie rozpoczynające kontrę", flavor: "Skrzydłowy ruszył. Sam jest tym zaskoczony.", prompt: "Wybierz linię podania", actionType: "podanie", kind: "choice", skill: "podania", effect: "assist", failConcedes: false },
+    { title: "Podanie rozpoczynające kontrę", flavor: "Skrzydłowy ruszył. Sam jest tym zaskoczony.", prompt: "Ustaw tempo, kierunek i siłę podania", actionType: "podanie", kind: "timing", skill: "podania", effect: "assist", failConcedes: false },
   ],
   Pomocnik: [
     { title: "Przyjęcie pod kontrolą urzędu", flavor: "Piłka leci mocno, rywal jeszcze mocniej.", prompt: "Zamortyzuj pierwszy kontakt", actionType: "przyjęcie", kind: "timing", skill: "technika", effect: "progression", failConcedes: false },
-    { title: "Podanie przez urząd skarbowy", flavor: "Wąski korytarz, duża odpowiedzialność.", prompt: "Wybierz właściwą linię", actionType: "podanie prostopadłe", kind: "choice", skill: "podania", effect: "assist", failConcedes: false },
-    { title: "Drybling przez korek", flavor: "Dwóch rywali, jedna piłka i zero planu B.", prompt: "Powtórz sekwencję zwodów", actionType: "drybling", kind: "sequence", skill: "drybling", effect: "progression", failConcedes: false },
+    { title: "Podanie przez urząd skarbowy", flavor: "Wąski korytarz, duża odpowiedzialność.", prompt: "Ustaw tempo, kierunek i siłę podania", actionType: "podanie prostopadłe", kind: "timing", skill: "podania", effect: "assist", failConcedes: false },
+    { title: "Drybling przez korek", flavor: "Dwóch rywali, jedna piłka i zero planu B.", prompt: "Złap rytm kolejnych kontaktów", actionType: "drybling", kind: "timing", skill: "drybling", effect: "progression", failConcedes: false },
     { title: "Strzał z drugiej linii", flavor: "Trener krzyczy „nie strzelaj”, czyli wiadomo co robić.", prompt: "Złap idealny moment", actionType: "strzał", kind: "timing", skill: "strzal", effect: "goal", failConcedes: false },
-    { title: "Kontrapressing po stracie", flavor: "Piłka odskoczyła rywalowi na długość jednej premii.", prompt: "Zareaguj i odbierz", actionType: "przechwyt", kind: "reaction", skill: "odbior", effect: "tackle", failConcedes: true },
+    { title: "Kontrapressing po stracie", flavor: "Piłka odskoczyła rywalowi na długość jednej premii.", prompt: "Wyczuj dystans i moment odbioru", actionType: "przechwyt", kind: "timing", skill: "odbior", effect: "tackle", failConcedes: true },
     { title: "Dośrodkowanie na nos", flavor: "Napastnik pokazuje gdzie. Oby sam wiedział.", prompt: "Ustaw siłę dośrodkowania", actionType: "dośrodkowanie", kind: "timing", skill: "technika", effect: "assist", failConcedes: false },
   ],
   Napastnik: [
     { title: "Sam na sam z ratą kredytu", flavor: "Bramkarz skraca kąt, ty skracaj procedurę.", prompt: "Traf w moment strzału", actionType: "strzał", kind: "timing", skill: "strzal", effect: "goal", failConcedes: false },
-    { title: "Obrońca kupuje pierwszy zwód", flavor: "Drugi jest w promocji, trzeci bez gwarancji.", prompt: "Powtórz sekwencję dryblingu", actionType: "drybling", kind: "sequence", skill: "drybling", effect: "progression", failConcedes: false },
-    { title: "Piłka spada z rachunkiem", flavor: "Masz sekundę na decyzję i całą szatnię do rozliczenia.", prompt: "Zareaguj na dobitkę", actionType: "dobitka", kind: "reaction", skill: "refleks", effect: "goal", failConcedes: false },
-    { title: "Kontra trzy na dwa", flavor: "Kolega jest wolny. To wydarzenie historyczne.", prompt: "Wybierz podanie lub strzał", actionType: "decyzja", kind: "choice", skill: "podania", effect: "assist", failConcedes: true },
+    { title: "Obrońca kupuje pierwszy zwód", flavor: "Drugi jest w promocji, trzeci bez gwarancji.", prompt: "Złap rytm kolejnych kontaktów", actionType: "drybling", kind: "timing", skill: "drybling", effect: "progression", failConcedes: false },
+    { title: "Piłka spada z rachunkiem", flavor: "Masz sekundę na decyzję i całą szatnię do rozliczenia.", prompt: "Wyczuj moment i kierunek dobitki", actionType: "dobitka", kind: "timing", skill: "refleks", effect: "goal", failConcedes: false },
+    { title: "Kontra trzy na dwa", flavor: "Kolega jest wolny. To wydarzenie historyczne.", prompt: "Ustaw tempo, kierunek i siłę zagrania", actionType: "decyzja", kind: "timing", skill: "podania", effect: "assist", failConcedes: true },
     { title: "Główka z piątego piętra", flavor: "Dośrodkowanie leci wysoko, obrońca jeszcze wyżej podnosi łokieć.", prompt: "Złap moment wyskoku", actionType: "główka", kind: "timing", skill: "sila", effect: "goal", failConcedes: false },
   ],
 };
 
 export function availableActionTypes() {
   return [...new Set(Object.values(OPPORTUNITY_LIBRARY).flat().map((opportunity) => opportunity.actionType))];
+}
+
+export function availableGameKinds() {
+  return [...new Set(Object.values(OPPORTUNITY_LIBRARY).flat().map((opportunity) => opportunity.kind))];
 }
 
 const FORMATION: Array<{ x: number; y: number; role: string; number: number }> = [
