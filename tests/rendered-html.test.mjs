@@ -164,3 +164,19 @@ test("microcycle has diminishing returns, three slots and dynamic traits", async
   const aged = applySeasonAging(attrs, "Napastnik", 34, 90);
   assert.ok(aged.szybkosc < attrs.szybkosc);
 });
+
+test("contracts settle money and transfers really change club terms", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { createMarketState, generateTransferOffers, acceptTransfer, settleCareerWeek } = await gameModule("/game/career-market.ts");
+  const world = createWorld(8080);
+  let market = createMarketState("PL-3-01", 1, 58, 8080);
+  market = settleCareerWeek(market, { season: 1, week: 1, appeared: true, goals: 2, rating: 8, won: true });
+  assert.ok(market.ledger[0].amountEur > market.contract.weeklySalaryEur);
+  for (let seed = 1; seed < 50 && !market.offers.length; seed += 1) market = generateTransferOffers(world, market, { season: 1, week: 15, age: 20, ovr: 58, potential: 84, form: 75, position: "Pomocnik", currentClubId: "PL-3-01" }, seed);
+  assert.ok(market.offers.length > 0);
+  const offer = market.offers[0];
+  const transferred = acceptTransfer(market, offer, 1, 15);
+  assert.equal(transferred.contract.clubId, offer.clubId);
+  assert.equal(transferred.offers.length, 0);
+  assert.ok(transferred.ledger[0].amountEur > 0);
+});
