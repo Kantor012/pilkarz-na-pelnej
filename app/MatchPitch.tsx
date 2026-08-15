@@ -5,7 +5,7 @@ import type { MatchSimulationState, PitchPlayer } from "../game/types";
 
 type Frame = { players: PitchPlayer[]; ball: { x: number; y: number }; startedAt: number };
 
-export default function MatchPitch({ match }: { match: MatchSimulationState }) {
+export default function MatchPitch({ match, reducedMotion = false }: { match: MatchSimulationState; reducedMotion?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previous = useRef<Frame | null>(null);
   const next = useRef<Frame>({ players: match.players, ball: match.ball, startedAt: 0 });
@@ -99,11 +99,11 @@ export default function MatchPitch({ match }: { match: MatchSimulationState }) {
       const by = y(lerp(fromBall.y, next.current.ball.y));
       context.beginPath(); context.arc(bx, by, 4.2, 0, Math.PI * 2);
       context.shadowBlur = 12; context.shadowColor = "#fff"; context.fillStyle = "#fff"; context.fill(); context.shadowBlur = 0;
-      animation = requestAnimationFrame(draw);
+      if (!reducedMotion) animation = requestAnimationFrame(draw);
     };
     animation = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animation);
-  }, [match]);
+  }, [match, reducedMotion]);
 
   return <canvas ref={canvasRef} className="match-pitch" role="img" aria-label={`Taktyczny widok boiska. ${match.minute}. minuta, wynik ${match.scoreHome}:${match.scoreAway}.`} />;
 }

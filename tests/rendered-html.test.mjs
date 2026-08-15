@@ -196,3 +196,17 @@ test("cups, Europe and national teams use the complete world", async () => {
   competitions = updateCallUp(competitions, "PL", 75, 80, 900);
   assert.equal(competitions.nationalTeams.find((team) => team.country === "PL").calledUp, true);
 });
+
+test("archive, events, settings and achievements persist as deterministic meta state", async () => {
+  const { defaultMetaGame, addWeeklyEvent, updateAchievements, addSeasonArchive, patchSettings } = await gameModule("/game/meta-game.ts");
+  let meta = defaultMetaGame();
+  meta = addWeeklyEvent(meta, 1, 2, 42);
+  assert.deepEqual(meta.eventLog[0], addWeeklyEvent(defaultMetaGame(), 1, 2, 42).eventLog[0]);
+  meta = updateAchievements(meta, { season: 1, week: 2, matches: 1, goals: 1, assists: 1, ovr: 76, money: 120000, calledUp: true });
+  assert.ok(meta.achievements.length >= 6);
+  meta = addSeasonArchive(meta, { season: 1, clubName: "Test", leagueName: "Liga", matches: 20, goals: 5, assists: 4, saves: 0, averageRating: 7.1, finalOvr: 70 });
+  assert.equal(meta.seasonArchive.length, 1);
+  meta = patchSettings(meta, { textMatch: true, reducedMotion: true, defaultSpeed: 4 });
+  assert.equal(meta.settings.textMatch, true);
+  assert.equal(meta.settings.defaultSpeed, 4);
+});
