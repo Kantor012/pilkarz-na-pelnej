@@ -182,16 +182,29 @@ const TRAININGS: Array<{
   { id: "finish", eyebrow: "ATAK", title: "Sto strzałów", copy: "Dziewięćdziesiąt osiem w płot. Dwa nagrane na TikToka.", gains: { strzal: 1.05, technika: 0.35, sila: 0.25 }, energy: -14, morale: 1 },
   { id: "gym", eyebrow: "FIZYCZNOŚĆ", title: "Siłownia bez selfie", copy: "Rzadki trening, na którym naprawdę ćwiczysz.", gains: { sila: 0.9, kondycja: 0.65, szybkosc: 0.25 }, energy: -16, morale: -1 },
   { id: "tactics", eyebrow: "GŁOWA", title: "Wideo z trenerem", copy: "Dwie godziny analizy, z czego 80 minut to pauzowanie pilota.", gains: { odbior: 0.65, podania: 0.65, refleks: 0.45 }, energy: -7, morale: 0 },
+  { id: "passing", eyebrow: "PODANIA", title: "Radar na dwa kontakty", copy: "Piłka ma chodzić szybciej niż plotki o premii.", gains: { podania: 1, technika: 0.35, refleks: 0.2 }, energy: -10, morale: 1 },
+  { id: "defense", eyebrow: "OBRONA", title: "Wślizgi bez przeprosin", copy: "Najpierw piłka. Przynajmniej tak wpisano w planie.", gains: { odbior: 1, sila: 0.35, kondycja: 0.25 }, energy: -13, morale: 0 },
+  { id: "speed", eyebrow: "SZYBKOŚĆ", title: "Sprint do autobusu", copy: "Ostatni kurs odjeżdża. Motywacja jest prawdziwa.", gains: { szybkosc: 1, kondycja: 0.45, drybling: 0.2 }, energy: -15, morale: -1 },
   { id: "recovery", eyebrow: "REGENERACJA", title: "Rosół i sen", copy: "Metoda zatwierdzona przez babcię oraz fizjoterapeutę.", gains: { kondycja: 0.2 }, energy: 24, morale: 4 },
 ];
 
-const TRAINING_ICONS = {
+const TRAINING_ICONS: Record<string, IconDefinition> = {
   ball: faFutbol,
   finish: faBullseye,
   gym: faDumbbell,
   tactics: faClipboardList,
+  passing: faArrowsLeftRight,
+  defense: faShieldHalved,
+  speed: faBolt,
   recovery: faBed,
+};
+
+const TRAINING_INTENSITIES = {
+  light: { label: "LEKKI", growth: 0.72, energy: 0.62, morale: 1, copy: "Mniejszy rozwój, oszczędzasz nogi" },
+  standard: { label: "NORMALNY", growth: 1, energy: 1, morale: 0, copy: "Pełny trening bez bohaterstwa" },
+  hard: { label: "MOCNY", growth: 1.34, energy: 1.4, morale: -1, copy: "Większy rozwój i większy koszt energii" },
 } as const;
+type TrainingIntensity = keyof typeof TRAINING_INTENSITIES;
 
 const ATTRIBUTE_ICONS: Record<AttrKey, IconDefinition> = {
   technika: faFutbol,
@@ -473,6 +486,7 @@ export default function Home() {
   const [difficulty, setDifficulty] = useState<Difficulty>("Normalny");
   const [hiddenMode, setHiddenMode] = useState("mystery");
   const [careerView, setCareerView] = useState<CareerView>("career");
+  const [trainingIntensity, setTrainingIntensity] = useState<TrainingIntensity>("standard");
 
   useEffect(() => {
     const saved = window.localStorage.getItem("pilkarz-na-pelnej-save-v2");
@@ -514,15 +528,16 @@ export default function Home() {
   const applyTraining = (training: (typeof TRAININGS)[number]) => {
     if (!career || career.trainingDone) return;
     const talent = HIDDEN_TALENTS[career.player.hiddenTalent];
+    const intensity = TRAINING_INTENSITIES[trainingIntensity];
     const multiplier = (0.75 + career.professionalism / 180) * (career.energy < 35 ? 0.62 : 1) * career.facilities * DIFFICULTIES[career.difficulty].growth;
     const attrs = { ...career.player.attrs };
     Object.entries(training.gains).forEach(([key, gain]) => {
       const attr = key as AttrKey;
       const talentBoost = talent.keys.includes(attr) ? talent.multiplier : 1;
-      attrs[attr] = clamp(attrs[attr] + gain * multiplier * talentBoost, 1, career.player.potential);
+      attrs[attr] = clamp(attrs[attr] + gain * multiplier * talentBoost * intensity.growth, 1, career.player.potential);
     });
     const nextTrainingCount = career.trainingCount + 1;
-    setCareer({ ...career, player: { ...career.player, attrs }, energy: clamp(career.energy + training.energy), morale: clamp(career.morale + training.morale), trainingDone: true, trainingCount: nextTrainingCount, hiddenRevealed: career.hiddenRevealed || nextTrainingCount >= 3 });
+    setCareer({ ...career, player: { ...career.player, attrs }, energy: clamp(career.energy + Math.round(training.energy * intensity.energy)), morale: clamp(career.morale + training.morale + intensity.morale), trainingDone: true, trainingCount: nextTrainingCount, hiddenRevealed: career.hiddenRevealed || nextTrainingCount >= 3 });
   };
 
   const startMatch = () => {
@@ -623,6 +638,7 @@ export default function Home() {
     window.localStorage.removeItem("pilkarz-na-pelnej-save-v2");
     setCareer(null);
     setMatch(null);
+    setTrainingIntensity("standard");
   };
 
   if (!loaded) return <main className="loading-screen">ŁADOWANIE KORKÓW…</main>;
@@ -741,6 +757,10 @@ export default function Home() {
   const currentOvr = ovr(career.player);
   const nextOpponent = OPPONENTS[career.matchIndex % OPPONENTS.length];
   const showDecision = career.week % 3 === 0 && !career.decisions.includes(career.week);
+  const attributePriorities = (Object.keys(career.player.attrs) as AttrKey[])
+    .sort((first, second) => (WEIGHTS[career.player.position][second] ?? 0) - (WEIGHTS[career.player.position][first] ?? 0))
+    .slice(0, 3);
+  const priorityRank = new Map(attributePriorities.map((key, index) => [key, index + 1]));
 
   return (
     <main className="career-screen career-console">
@@ -785,21 +805,22 @@ export default function Home() {
           )}
 
           {careerView === "training" && <section className="training-section focused-section">
-            <div className="section-title"><div><p className="micro-label">PLAN TYGODNIA</p><h3>Jeden wybór. Konkretne liczby.</h3></div><span className={career.trainingDone ? "done-chip" : "open-chip"}>{career.trainingDone ? "PLAN ZREALIZOWANY" : "WYBIERZ TRENING"}</span></div>
+            <div className="section-title training-section-title"><div><p className="micro-label">PLAN TYGODNIA</p><h3>Wybierz typ i intensywność.</h3></div><div className="training-heading-actions"><span className={career.trainingDone ? "done-chip" : "open-chip"}>{career.trainingDone ? "PLAN ZREALIZOWANY" : "WYBIERZ TRENING"}</span><div className="intensity-picker" role="group" aria-label="Intensywność treningu">{(Object.entries(TRAINING_INTENSITIES) as Array<[TrainingIntensity, (typeof TRAINING_INTENSITIES)[TrainingIntensity]]>).map(([id, intensity]) => <button key={id} type="button" title={intensity.copy} disabled={career.trainingDone} className={trainingIntensity === id ? "active" : ""} onClick={() => setTrainingIntensity(id)}>{intensity.label}</button>)}</div></div></div>
             <div className="training-grid">{TRAININGS.map((training) => (
               <button key={training.id} disabled={career.trainingDone} className={`training-card training-${training.id}`} onClick={() => applyTraining(training)}>
-                <div className="training-card-top"><span className="training-icon"><FontAwesomeIcon icon={TRAINING_ICONS[training.id as keyof typeof TRAINING_ICONS]} /></span><div><small>{training.eyebrow}</small><strong>{training.title}</strong></div></div>
+                <div className="training-card-top"><span className="training-icon"><FontAwesomeIcon icon={TRAINING_ICONS[training.id]} /></span><div><small>{training.eyebrow}</small><strong>{training.title}</strong></div></div>
                 <p>{training.copy}</p>
-                <div className="training-effects">{Object.entries(training.gains).map(([key, gain]) => <b key={key}>+{gain} {ATTR_LABELS[key as AttrKey]}</b>)}<em className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{training.energy} energii</em></div>
+                <div className="training-effects">{Object.entries(training.gains).map(([key, gain]) => { const adjustedGain = Number((gain * TRAINING_INTENSITIES[trainingIntensity].growth).toFixed(2)); return <b key={key}>+{adjustedGain} {ATTR_LABELS[key as AttrKey]}</b>; })}<em className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{Math.round(training.energy * TRAINING_INTENSITIES[trainingIntensity].energy)} energii</em></div>
               </button>
             ))}</div>
           </section>}
 
           {careerView === "player" && <section className="attributes-section focused-section">
-            <div className="section-title"><div><p className="micro-label">TWOJE LICZBY</p><h3>Skąd bierze się OVR {currentOvr.toFixed(1)}?</h3></div><span className="formula-chip">SUMA WAŻONA DLA POZYCJI</span></div>
+            <div className="section-title attribute-section-title"><div><p className="micro-label">WAGI DLA POZYCJI • {career.player.position.toUpperCase()}</p><p className="section-note">Trzy oznaczone kategorie mają największy wpływ na twój OVR.</p></div><span className="formula-chip">3 GŁÓWNE PRIORYTETY</span></div>
             <div className="attributes-grid">{(Object.keys(career.player.attrs) as AttrKey[]).map((key) => {
               const value = career.player.attrs[key]; const weight = WEIGHTS[career.player.position][key] ?? 0;
-              return <div className={`attribute attribute-${key} ${weight >= 0.15 ? "key-attribute" : ""}`} key={key}><div><FontAwesomeIcon className="attribute-icon" icon={ATTRIBUTE_ICONS[key]} /><span>{ATTR_LABELS[key]}</span>{weight > 0 && <small>{Math.round(weight * 100)}% OVR</small>}<strong>{value.toFixed(1)}</strong></div><i><b style={{ width: `${value}%` }} /></i></div>;
+              const priority = priorityRank.get(key);
+              return <div className={`attribute attribute-${key} ${priority ? `priority-${priority}` : ""}`} key={key}><div><FontAwesomeIcon className="attribute-icon" icon={ATTRIBUTE_ICONS[key]} /><span>{ATTR_LABELS[key]}</span>{weight > 0 && <small>{Math.round(weight * 100)}% OVR {priority && <em className="priority-mark" title={`Priorytet ${priority}`}>P{priority}</em>}</small>}<strong>{value.toFixed(1)}</strong></div><i><b style={{ width: `${value}%` }} /></i></div>;
             })}</div>
           </section>}
 

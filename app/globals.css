@@ -795,3 +795,52 @@ body { background:#071019; }
   .career-console .attribute-icon { width:12px; height:12px; padding:7px; }
   .career-console .overview-stats article>svg { margin-bottom:8px; padding:7px; }
 }
+
+/* POSITION PRIORITIES */
+.career-console .attribute-section-title { min-height:38px; }
+.career-console .attribute-section-title .section-note { margin:5px 0 0; color:#95a4b2; font-size:10px; line-height:1.35; }
+.career-console .attribute.priority-1,.career-console .attribute.priority-2,.career-console .attribute.priority-3 { border-color:color-mix(in srgb,var(--priority-color) 28%,#293a49); box-shadow:inset 2px 0 0 var(--priority-color); }
+.career-console .attribute.priority-1::before,.career-console .attribute.priority-2::before,.career-console .attribute.priority-3::before { content:''; position:absolute; inset:0; z-index:0; background:linear-gradient(135deg,color-mix(in srgb,var(--priority-color) 8%,transparent),transparent 48%); pointer-events:none; }
+.career-console .attribute.priority-1 { --priority-color:#ffd15a; }
+.career-console .attribute.priority-2 { --priority-color:#91b9dc; }
+.career-console .attribute.priority-3 { --priority-color:#d98c62; }
+.career-console .priority-mark { display:inline-block; margin-left:5px; padding:2px 4px; border:1px solid color-mix(in srgb,var(--priority-color) 34%,transparent); border-radius:4px; color:var(--priority-color); background:color-mix(in srgb,var(--priority-color) 7%,transparent); font:800 6px var(--font-montserrat),sans-serif; letter-spacing:.04em; vertical-align:1px; }
+
+@media (max-width:1180px) and (min-width:761px) {
+  .career-console .attribute-section-title .section-note { font-size:8px; }
+  .career-console .priority-mark { margin-left:3px; padding:1px 3px; font-size:5px; }
+}
+
+/* TRAINING TYPES + INTENSITY */
+.career-console .training-heading-actions { display:flex; align-items:center; gap:9px; }
+.career-console .intensity-picker { display:flex; padding:3px; gap:3px; border:1px solid rgba(255,255,255,.1); border-radius:8px; background:#0b1620; }
+.career-console .intensity-picker button { min-width:66px; height:28px; padding:0 8px; border:0; border-radius:6px; color:#7f8f9e; background:transparent; font:800 7px var(--font-montserrat),sans-serif; letter-spacing:.05em; }
+.career-console .intensity-picker button:hover:not(:disabled) { color:#dfe7ed; background:rgba(255,255,255,.05); }
+.career-console .intensity-picker button.active { color:#111820; background:linear-gradient(135deg,var(--career-accent),#ffd36d); box-shadow:0 5px 14px rgba(243,170,33,.12); }
+.career-console .training-grid { height:calc(100% - 58px); grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); gap:8px; }
+.career-console .training-card { gap:8px; padding:13px; }
+.career-console .training-icon { flex-basis:39px; width:39px; height:39px; font-size:16px; }
+.career-console .training-card-top { gap:10px; }
+.career-console .training-card-top strong { font-size:12px; }
+.career-console .training-card>p { font-size:9px; line-height:1.4; }
+.career-console .training-passing { --icon-color:#65b5ff; --icon-bg:rgba(101,181,255,.13); --card-glow:rgba(101,181,255,.1); }
+.career-console .training-defense { --icon-color:#45d998; --icon-bg:rgba(69,217,152,.13); --card-glow:rgba(69,217,152,.1); }
+.career-console .training-speed { --icon-color:#ff8c69; --icon-bg:rgba(255,140,105,.13); --card-glow:rgba(255,140,105,.1); }
+
+@media (max-width:1180px) and (min-width:761px) {
+  .career-console .training-section-title h3 { font-size:14px; }
+  .career-console .training-heading-actions { gap:5px; }
+  .career-console .training-heading-actions>.done-chip,.career-console .training-heading-actions>.open-chip { display:none; }
+  .career-console .intensity-picker button { min-width:52px; padding-inline:5px; font-size:6px; }
+  .career-console .training-grid { grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(4,minmax(0,1fr)); }
+  .career-console .training-card>p { display:none; }
+  .career-console .training-icon { flex-basis:31px; width:31px; height:31px; font-size:13px; }
+}
+
+@media (max-width:760px) {
+  .career-console .training-section-title { align-items:flex-start; gap:10px; }
+  .career-console .training-heading-actions { align-items:flex-end; flex-direction:column; }
+  .career-console .training-heading-actions>.done-chip,.career-console .training-heading-actions>.open-chip { display:none; }
+  .career-console .intensity-picker button { min-width:52px; }
+  .career-console .training-grid { height:auto; grid-template-columns:1fr; grid-template-rows:none; }
+}
