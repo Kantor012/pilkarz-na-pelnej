@@ -326,3 +326,18 @@ test("archive, events, settings and achievements persist as deterministic meta s
   assert.equal(meta.settings.textMatch, true);
   assert.equal(meta.settings.defaultSpeed, 4);
 });
+
+test("optional cloud repository uploads and downloads SaveGameV3 without changing local saves", async () => {
+  const { CloudSaveRepository } = await gameModule("/game/cloud-save.ts");
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  const save = { version:3,seed:42,savedAt:1,career:{ player:"test" },world:{ version:1 },activeMatch:null,settings:{engineVersion:"v3",matchSpeed:1,reducedMotion:false} };
+  globalThis.fetch = async (url, init = {}) => { calls.push({url,init}); return init.method === "POST" ? Response.json({ok:true}) : Response.json({save,updatedAt:"now"}); };
+  try {
+    await CloudSaveRepository.upload(save);
+    const downloaded = await CloudSaveRepository.download();
+    assert.equal(calls[0].url,"/api/cloud-save");
+    assert.equal(calls[0].init.method,"POST");
+    assert.deepEqual(downloaded.save,save);
+  } finally { globalThis.fetch = originalFetch; }
+});

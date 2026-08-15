@@ -1,5 +1,13 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786831553334,
+      "tag": "0000_wakeful_catseye",
+      "breakpoints": true
+    }
+  ]
 }

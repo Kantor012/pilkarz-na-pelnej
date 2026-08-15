@@ -10,6 +10,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import MatchPitch from "./MatchPitch";
 import { SaveRepository } from "../game/save-repository";
+import { CloudSaveRepository } from "../game/cloud-save";
 import {
   advanceMatch, continueAfterAction, createMatch, opportunityChanceRange, roleLabel,
   setMatchSpeed, submitAction,
@@ -144,6 +145,7 @@ export default function CareerGame() {
   const [paused, setPaused] = useState(false);
   const [ready, setReady] = useState(false);
   const [simulatingWorld, setSimulatingWorld] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState("");
   const [intensity, setIntensity] = useState<Intensity>("normalny");
   const [creator, setCreator] = useState({ name: "Mirek Wolej", age: 18, nationality: "PL" as CountryCode, position: "Pomocnik" as Position, foot: "Prawa" as "Prawa" | "Lewa", ovr: 50, club: START_CLUBS[0], style: "Dyrygent", talent: TALENTS[5] });
   const latestGoalEventId = match?.events[0]?.type === "goal" ? match.events[0].id : null;
@@ -218,6 +220,24 @@ export default function CareerGame() {
   };
 
   const reset = async () => { await SaveRepository.clear(); setCareer(null); setWorld(null); setMatch(null); setReady(false); };
+
+  const uploadCloudSave = async () => {
+    if (!career || !world) return;
+    setCloudStatus("Wysyłanie…");
+    try {
+      await CloudSaveRepository.upload<Career>({ version: 3, seed, savedAt: Date.now(), career, world, activeMatch: match, settings: { engineVersion: "v3", matchSpeed: match?.speed ?? 1, reducedMotion: career.meta?.settings.reducedMotion ?? false } });
+      setCloudStatus("Zapis wysłany do chmury.");
+    } catch (error) { setCloudStatus(error instanceof Error ? error.message : "Chmura jest niedostępna."); }
+  };
+
+  const downloadCloudSave = async () => {
+    setCloudStatus("Pobieranie…");
+    try {
+      const result = await CloudSaveRepository.download<Career>();
+      if (!result.save) { setCloudStatus("Brak zapisu w chmurze."); return; }
+      setSeed(result.save.seed); setCareer(result.save.career); setWorld(result.save.world); setMatch(result.save.activeMatch); setCloudStatus("Zapis pobrany z chmury.");
+    } catch (error) { setCloudStatus(error instanceof Error ? error.message : "Chmura jest niedostępna."); }
+  };
 
   const startMatch = () => {
     if (!career || !world || career.retired) return;
@@ -379,6 +399,7 @@ export default function CareerGame() {
       <aside className="v3-profile"><div className="v3-shirt">{career.player.number}<small>{playerClub.short}</small></div><p className="micro-label">{career.player.position} • {career.player.foot} noga • {career.player.style}</p><h1>{career.player.name}</h1><span>{career.age} lat • {COUNTRY_NAMES[career.nationality]}</span><p>{playerClub.name}<small>{league.name}</small></p><div className="v3-profile-ovr"><span>OVR</span><strong>{playerOvr.toFixed(1)}</strong><small>Potencjał {career.player.potential}</small></div><div className="v3-bars"><label>ENERGIA <b>{Math.round(career.energy)}%</b><i><em style={{ width: `${career.energy}%` }} /></i></label><label>MORALE <b>{Math.round(career.morale)}%</b><i><em style={{ width: `${career.morale}%` }} /></i></label><label>ZAUFANIE TRENERA <b>{Math.round(career.managerTrust)}%</b><i><em style={{ width: `${career.managerTrust}%` }} /></i></label></div><div className="v3-availability"><span>{availability.injuryWeeks > 0 ? `KONTUZJA ${availability.injuryWeeks} TYG.` : availability.suspendedMatches > 0 ? "ZAWIESZONY" : "GOTOWY"}</span><b>{availability.yellowCards}/5 kartek</b><b>rytm {availability.matchSharpness}%</b></div><div className="v3-talent"><FontAwesomeIcon icon={faWandMagicSparkles} /><span>TALENT</span><strong>{career.hiddenRevealed ? career.hiddenTalent : "???"}</strong><small>{career.hiddenRevealed ? "Bonus działa na rozwój." : `${career.trainingCount}/3 treningów do odkrycia`}</small></div></aside>
       <section className="v3-dashboard">
         {view === "records" && <button className={`v3-sound-toggle ${meta.settings.sound ? "active" : ""}`} onClick={() => setCareer({ ...career, meta: patchSettings(meta,{ sound:!meta.settings.sound }) })}>DŹWIĘK MECZU: {meta.settings.sound ? "WŁĄCZONY" : "WYŁĄCZONY"}</button>}
+        {view === "records" && <section className="v3-cloud-sync"><div><strong>OPCJONALNY ZAPIS D1</strong><span>IndexedDB pozostaje głównym zapisem. Chmura działa ręcznie po zalogowaniu i skonfigurowaniu bindingu DB.</span></div><button onClick={() => void uploadCloudSave()}>WYŚLIJ</button><button onClick={() => void downloadCloudSave()}>POBIERZ</button>{cloudStatus && <em>{cloudStatus}</em>}</section>}
         {career.retired && <div className="v3-retired"><FontAwesomeIcon icon={faTrophy}/><div><strong>KARIERA ZAKOŃCZONA W WIEKU {career.age} LAT</strong><p>Wyniki, sezony i osiągnięcia pozostają w archiwum. Kolana proszą, żeby nie klikać kolejnego meczu.</p></div></div>}
         {view === "market" && market.offers.length > 0 && <div className="v3-negotiation-strip"><span>AGENT MOŻE NEGOCJOWAĆ KAŻDĄ OFERTĘ MAKSYMALNIE 2 RAZY</span>{market.offers.map((offer) => <button key={offer.id} disabled={(offer.negotiationRound ?? 0) >= 2 || offer.interest <= 15} onClick={() => setCareer({ ...career, market: negotiateOffer(market, offer.id) })}>{world.clubs[offer.clubId].short}: NEGOCJUJ {offer.negotiationRound ?? 0}/2</button>)}</div>}
         {meta.tutorialStep < 3 && <aside className="v3-tutorial"><div><span>SZYBKA ODPRAWA {meta.tutorialStep + 1}/3</span><strong>{["Trening buduje atrybuty, ale zabiera energię.","Trener wybiera skład według OVR, formy i zaufania.","W meczu poczekaj na zapowiedź i kliknij „Jestem gotowy”."][meta.tutorialStep]}</strong></div><button onClick={() => setCareer({ ...career, meta: { ...meta, tutorialStep: meta.tutorialStep + 1 } })}>{meta.tutorialStep === 2 ? "ROZUMIEM" : "DALEJ"}</button></aside>}
