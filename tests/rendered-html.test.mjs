@@ -183,7 +183,7 @@ test("contracts settle money and transfers really change club terms", async () =
 
 test("cups, Europe and national teams use the complete world", async () => {
   const { createWorld } = await gameModule("/game/world.ts");
-  const { createCompetitions, advanceCup, updateCallUp } = await gameModule("/game/competitions.ts");
+  const { createCompetitions, advanceCup, advanceCompetitionsWeek, updateCallUp } = await gameModule("/game/competitions.ts");
   const world = createWorld(9090);
   let competitions = createCompetitions(world, "PL", 72);
   assert.equal(Object.keys(competitions.cups).length, 8);
@@ -195,6 +195,15 @@ test("cups, Europe and national teams use the complete world", async () => {
   assert.equal(round32.ties.length, 16);
   competitions = updateCallUp(competitions, "PL", 75, 80, 900);
   assert.equal(competitions.nationalTeams.find((team) => team.country === "PL").calledUp, true);
+  let finishedCup = competitions.cups.PL;
+  while (finishedCup.round !== "finished") finishedCup = advanceCup(finishedCup, world);
+  competitions.cups.PL = finishedCup;
+  world.season = 2;
+  let nextSeason = createCompetitions(world, "PL", 75, competitions);
+  assert.ok(nextSeason.europe.groups.flat().includes(finishedCup.winnerId));
+  for (const week of [6,14,22,30]) nextSeason = advanceCompetitionsWeek(nextSeason, world, week);
+  assert.equal(nextSeason.internationalTournament.phase, "finished");
+  assert.ok(nextSeason.internationalTournament.champion);
 });
 
 test("archive, events, settings and achievements persist as deterministic meta state", async () => {

@@ -265,7 +265,7 @@ export default function CareerGame() {
     const nextMarket = generateTransferOffers(advancedWorld, sponsorshipDecision(settledMarket), { season: advancedWorld.season, week: career.week === 30 ? 1 : career.week + 1, age: nextAge, ovr: match.playerOvr, potential: career.player.potential, form: (career.energy + career.morale) / 2, position: career.player.position, currentClubId: career.clubId }, seed + career.week);
     const income = nextMarket.ledger[0]?.id !== career.market?.ledger[0]?.id ? nextMarket.ledger[0]?.amountEur ?? 0 : 0;
     const previousCompetitions = career.competitions ?? createCompetitions(world, career.nationality, match.playerOvr);
-    const advancedCompetitions = advancedWorld.season !== previousCompetitions.season ? createCompetitions(advancedWorld, career.nationality, match.playerOvr) : advanceCompetitionsWeek(previousCompetitions, advancedWorld, career.week);
+    const advancedCompetitions = advancedWorld.season !== previousCompetitions.season ? createCompetitions(advancedWorld, career.nationality, match.playerOvr, previousCompetitions) : advanceCompetitionsWeek(previousCompetitions, advancedWorld, career.week);
     const nextCompetitions = updateCallUp(advancedCompetitions, career.nationality, match.playerOvr, (career.energy + career.morale) / 2, career.totals.matches * 75);
     const nextMoney = career.money + Math.round(income * 4.3);
     const nextTotals = { matches: career.totals.matches + (appeared ? 1 : 0), goals: career.totals.goals + match.stats.goals, assists: career.totals.assists + match.stats.assists, saves: career.totals.saves + match.stats.saves, rating: career.totals.rating + (appeared ? match.rating : 0) };
