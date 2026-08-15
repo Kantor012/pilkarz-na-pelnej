@@ -1230,3 +1230,15 @@ body { background:#071019; }
   .v3-profile { display:none; }
   .v3-next { position:static; max-height:none; overflow:visible; }
 }
+
+/* Persistent career chrome — logo and navigation stay above long views. */
+.v3-career { --career-top-height:72px; --career-nav-height:58px; }
+.v3-top { position:sticky; top:0; z-index:60; height:var(--career-top-height); box-shadow:0 8px 24px rgba(2,8,13,.18); }
+.v3-nav { position:sticky; top:var(--career-top-height); z-index:59; height:var(--career-nav-height); box-shadow:0 10px 24px rgba(2,8,13,.22); }
+.v3-profile,.v3-next { top:calc(var(--career-top-height) + var(--career-nav-height)); max-height:calc(100vh - var(--career-top-height) - var(--career-nav-height) - 12px); }
+@media (max-width:1450px) and (max-height:850px) {
+  .v3-career { --career-top-height:60px; --career-nav-height:50px; }
+}
+@media (max-width:620px) {
+  .v3-career { --career-top-height:62px; --career-nav-height:58px; }
+}
