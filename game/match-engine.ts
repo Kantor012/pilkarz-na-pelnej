@@ -82,6 +82,7 @@ function controlledIndex(position: Position) {
 }
 
 function determineRole(input: CreateMatchInput, state: number) {
+  if (input.forcedRole) return { state, role: input.forcedRole };
   const form = (input.energy + input.morale) / 2;
   const score = input.managerTrust * 0.5 + form * 0.25 + 25 + (input.playerOvr - input.teamStrength) * 1.6;
   const roll = nextRandom(state);

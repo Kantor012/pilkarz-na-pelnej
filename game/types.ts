@@ -213,6 +213,7 @@ export interface CreateMatchInput {
   teamStrength: number;
   playerClub: ClubProfile;
   opponent: ClubProfile;
+  forcedRole?: MatchRole;
 }
 
 export interface SaveGameV3<TCareer = unknown> {

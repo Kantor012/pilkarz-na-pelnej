@@ -128,3 +128,19 @@ test("foreign players materialize deterministically only when requested", async 
   assert.equal(first.clubId, "ES-1-01");
   assert.ok(first.ovr >= 25 && first.ovr <= 92);
 });
+
+test("coach builds a deterministic squad and explains lineup hierarchy", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { createClubSquad, selectPlayerForMatch } = await gameModule("/game/squad.ts");
+  const world = createWorld(2026);
+  const squad = createClubSquad(world, "PL-3-01");
+  assert.equal(squad.members.length, 23);
+  assert.deepEqual(squad, createClubSquad(world, "PL-3-01"));
+  const availability = { injuryWeeks: 0, yellowCards: 0, suspendedMatches: 0, matchSharpness: 70 };
+  const star = selectPlayerForMatch(squad, { position: "Pomocnik", ovr: 92, energy: 90, morale: 90, managerTrust: 90, availability });
+  const injured = selectPlayerForMatch(squad, { position: "Pomocnik", ovr: 92, energy: 90, morale: 90, managerTrust: 90, availability: { ...availability, injuryWeeks: 2 } });
+  assert.equal(star.role, "starter");
+  assert.equal(injured.role, "out");
+  assert.ok(star.reasons.length >= 3);
+  assert.ok(star.competitors.length > 0);
+});
