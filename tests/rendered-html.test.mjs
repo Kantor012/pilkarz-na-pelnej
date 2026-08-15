@@ -144,3 +144,23 @@ test("coach builds a deterministic squad and explains lineup hierarchy", async (
   assert.ok(star.reasons.length >= 3);
   assert.ok(star.competitors.length > 0);
 });
+
+test("microcycle has diminishing returns, three slots and dynamic traits", async () => {
+  const { emptyDevelopmentState, selectMicrocycleSession, setDevelopmentIntensity, forecastSession, applyMicrocycle, applySeasonAging } = await gameModule("/game/development.ts");
+  const training = { id: "finish", attrs: { strzal: 1, technika: .3 }, energy: -12 };
+  const weights = { strzal: .26, technika: .16 };
+  let state = emptyDevelopmentState();
+  state = selectMicrocycleSession(state, "finish", false);
+  state = selectMicrocycleSession(state, "ball", false);
+  state = selectMicrocycleSession(state, "recovery", true);
+  state = setDevelopmentIntensity(state, "mocny");
+  assert.deepEqual(state.plan, { main: "finish", supplementary: "ball", recovery: "recovery", intensity: "mocny" });
+  const fresh = forecastSession(state, training, 19, weights, "main");
+  const repeated = forecastSession({ ...state, recentSessions: Array(7).fill("finish") }, training, 19, weights, "main");
+  assert.ok(fresh.ovrGain > repeated.ovrGain);
+  const attrs = { technika: 60, strzal: 60, podania: 60, drybling: 60, odbior: 60, szybkosc: 60, sila: 60, kondycja: 60, refleks: 60 };
+  const result = applyMicrocycle({ state: { ...state, recentSessions: Array(6).fill("finish") }, trainings: [training, { id: "ball", attrs: { technika: .8 }, energy: -8 }, { id: "recovery", attrs: { kondycja: .2 }, energy: 20 }], attrs, age: 19, potential: 90, positionWeight: weights, professionalism: 70, facilities: 1 });
+  assert.ok(result.state.traits.includes("Łowca pola karnego"));
+  const aged = applySeasonAging(attrs, "Napastnik", 34, 90);
+  assert.ok(aged.szybkosc < attrs.szybkosc);
+});

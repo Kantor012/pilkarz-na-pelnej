@@ -20,6 +20,7 @@ import {
 } from "../game/world";
 import { advanceWorldWeekAsync } from "../game/world-client";
 import { advancePlayerAvailability, advanceSquadWeek, createClubSquad, selectPlayerForMatch, type ClubSquadState, type PlayerAvailability } from "../game/squad";
+import { applyMicrocycle, applySeasonAging, emptyDevelopmentState, selectMicrocycleSession, setDevelopmentIntensity, type DevelopmentState } from "../game/development";
 import type {
   AttrKey, Attributes, CountryCode, InteractiveOpportunity, MatchSimulationState,
   Position, SaveGameV3, WorldState,
@@ -46,6 +47,7 @@ type Career = {
   totals: { matches: number; goals: number; assists: number; saves: number; rating: number };
   squad?: ClubSquadState;
   availability?: PlayerAvailability;
+  development?: DevelopmentState;
 };
 
 const COUNTRY_NAMES: Record<CountryCode, string> = { PL: "Polska", DE: "Niemcy", IT: "Włochy", NL: "Holandia", FR: "Francja", EN: "Anglia", PT: "Portugalia", ES: "Hiszpania" };
@@ -160,7 +162,7 @@ export default function CareerGame() {
       if (!alive) return;
       if (save?.version === 3) {
         const savedCareer = save.career;
-        setSeed(save.seed); setCareer({ ...savedCareer, squad: savedCareer.squad ?? createClubSquad(save.world, savedCareer.clubId), availability: savedCareer.availability ?? DEFAULT_AVAILABILITY }); setWorld(save.world); setMatch(save.activeMatch);
+        setSeed(save.seed); setCareer({ ...savedCareer, squad: savedCareer.squad ?? createClubSquad(save.world, savedCareer.clubId), availability: savedCareer.availability ?? DEFAULT_AVAILABILITY, development: savedCareer.development ?? emptyDevelopmentState() }); setWorld(save.world); setMatch(save.activeMatch);
       } else {
         const legacyText = window.localStorage.getItem("pilkarz-na-pelnej-save-v2");
         if (legacyText) {
@@ -171,7 +173,7 @@ export default function CareerGame() {
             const club = findClubByName(legacyWorld, String(legacy.player?.club ?? START_CLUBS[0]));
             const migrated: Career = {
               ...(legacy as unknown as Career), age: 18, nationality: "PL", clubId: club.id, leagueId: `${club.country}-L${club.tier}`,
-              managerTrust: 50, hiddenTalent: "Losowy", hiddenRevealed: Boolean(legacy.hiddenRevealed), trainingCount: Number(legacy.trainingCount ?? 0), squad: createClubSquad(legacyWorld, club.id), availability: DEFAULT_AVAILABILITY,
+              managerTrust: 50, hiddenTalent: "Losowy", hiddenRevealed: Boolean(legacy.hiddenRevealed), trainingCount: Number(legacy.trainingCount ?? 0), squad: createClubSquad(legacyWorld, club.id), availability: DEFAULT_AVAILABILITY, development: emptyDevelopmentState(),
             };
             setSeed(legacySeed); setCareer(migrated); setWorld(legacyWorld);
           } catch { window.localStorage.removeItem("pilkarz-na-pelnej-save-v2"); }
@@ -213,6 +215,7 @@ export default function CareerGame() {
       hiddenTalent: creator.talent, hiddenRevealed: creator.talent !== TALENTS[5], trainingCount: 0,
       totals: { matches: 0, goals: 0, assists: 0, saves: 0, rating: 0 },
       squad: createClubSquad(nextWorld, club.id), availability: DEFAULT_AVAILABILITY,
+      development: emptyDevelopmentState(),
     };
     setSeed(careerSeed); setWorld(nextWorld); setCareer(nextCareer); setView("home");
   };
@@ -247,8 +250,10 @@ export default function CareerGame() {
     const updatedClub = advancedWorld.clubs[career.clubId];
     const nextSquad = advanceSquadWeek(career.squad ?? createClubSquad(world, career.clubId), seed + career.week);
     const nextAvailability = advancePlayerAvailability(career.availability ?? DEFAULT_AVAILABILITY, seed + career.week, career.energy, appeared);
+    const nextAge = career.week === 30 ? career.age + 1 : career.age;
+    const agedAttrs = career.week === 30 ? applySeasonAging(career.player.attrs, career.player.position, nextAge, career.player.potential) : career.player.attrs;
     setCareer({
-      ...career, week: career.week === 30 ? 1 : career.week + 1, season: advancedWorld.season, age: career.week === 30 ? career.age + 1 : career.age,
+      ...career, player: { ...career.player, attrs: agedAttrs }, week: career.week === 30 ? 1 : career.week + 1, season: advancedWorld.season, age: nextAge,
       leagueId: `${updatedClub.country}-L${updatedClub.tier}`,
       energy: clamp(career.energy - (appeared ? 16 : 4)), morale: clamp(career.morale + (match.scoreHome > match.scoreAway ? 5 : match.scoreHome < match.scoreAway ? -3 : 1)),
       managerTrust: clamp(career.managerTrust + (match.rating - 6) * 2.2), trainingDone: false,
@@ -258,13 +263,19 @@ export default function CareerGame() {
     setMatch(null); setReady(false); setView("home"); setSimulatingWorld(false);
   };
 
-  const train = (training: (typeof TRAININGS)[number]) => {
+  const chooseTraining = (training: (typeof TRAININGS)[number]) => {
     if (!career || career.trainingDone) return;
-    const multiplier = INTENSITY[intensity].growth * (.82 + career.managerTrust / 320);
-    const attrs = { ...career.player.attrs };
-    Object.entries(training.attrs).forEach(([key, gain]) => { attrs[key as AttrKey] = clamp(attrs[key as AttrKey] + (gain ?? 0) * multiplier, 1, career.player.potential); });
-    const trainingCount = career.trainingCount + 1;
-    setCareer({ ...career, player: { ...career.player, attrs }, trainingDone: true, trainingCount, hiddenRevealed: career.hiddenRevealed || trainingCount >= 3, energy: clamp(career.energy + training.energy * INTENSITY[intensity].cost), managerTrust: clamp(career.managerTrust + (training.id === "recovery" ? .5 : 1.5)) });
+    const development = career.development ?? emptyDevelopmentState();
+    setCareer({ ...career, development: selectMicrocycleSession(development, training.id, training.id === "recovery") });
+  };
+
+  const executeMicrocycle = () => {
+    if (!career || !world || career.trainingDone) return;
+    const development = career.development ?? emptyDevelopmentState();
+    if (!development.plan.main) return;
+    const result = applyMicrocycle({ state: development, trainings: TRAININGS, attrs: career.player.attrs, age: career.age, potential: career.player.potential, positionWeight: WEIGHTS[career.player.position], professionalism: career.managerTrust, facilities: world.clubs[career.clubId].facilities });
+    const trainingCount = career.trainingCount + [development.plan.main, development.plan.supplementary, development.plan.recovery].filter(Boolean).length;
+    setCareer({ ...career, player: { ...career.player, attrs: result.attrs }, development: result.state, trainingDone: true, trainingCount, hiddenRevealed: career.hiddenRevealed || trainingCount >= 3, energy: clamp(career.energy + result.energy), managerTrust: clamp(career.managerTrust + 1 + Math.max(0, result.state.weeklyLoad - 45) / 80) });
   };
 
   if (!loaded) return <main className="v3-loading"><div className="brand-mark">P:N:P</div><p>Ładujemy szatnię i 384 kluby…</p></main>;
@@ -323,7 +334,13 @@ export default function CareerGame() {
         {view === "home" && <><div className="v3-view-title"><p className="micro-label">CENTRUM KARIERY</p><h2>Jedna decyzja naraz. Resztę liczy świat.</h2></div><section className="v3-hero-card"><div><p className="micro-label">NAJWAŻNIEJSZE TERAZ</p><h3>{career.trainingDone ? "Plan wykonany. Czas sprawdzić decyzję trenera." : "Masz trening przed kolejną kolejką."}</h3><p>{opponent ? `Rywal: ${opponent.name}, siła ${opponent.strength.toFixed(1)}. Występ zależy od OVR, formy i zaufania.` : "Terminarz czeka na kolejną kolejkę."}</p><button onClick={() => setView("training")}>{career.trainingDone ? "ZOBACZ TRENING" : "WYBIERAM TRENING"}</button></div><div className="v3-kpis"><article><FontAwesomeIcon icon={faStar} /><span>OVR</span><strong>{playerOvr.toFixed(1)}</strong></article><article><FontAwesomeIcon icon={faGaugeHigh} /><span>FORMA</span><strong>{Math.round((career.energy + career.morale) / 2)}%</strong></article><article><FontAwesomeIcon icon={faClock} /><span>MECZE</span><strong>{career.totals.matches}</strong></article><article><FontAwesomeIcon icon={faCoins} /><span>KONTO</span><strong>{career.money} zł</strong></article></div></section><section className="v3-engine-note"><FontAwesomeIcon icon={faChartLine} /><div><strong>NOWY SILNIK MECZU</strong><p>90 minut, niezależne gole zespołów, 0–7 okazji gracza, ławka i brak występu. Każda minigra zwraca jakość 0–100.</p></div></section></>}
         {view === "player" && <><div className="v3-view-title"><p className="micro-label">KARTA ZAWODNIKA</p><h2>Co naprawdę buduje OVR {playerOvr.toFixed(1)}?</h2></div><div className="v3-attributes">{(Object.keys(career.player.attrs) as AttrKey[]).map((key) => { const priority = priorities.indexOf(key); return <article key={key} className={priority >= 0 ? `priority p${priority + 1}` : ""}><FontAwesomeIcon icon={ATTR_ICONS[key]} /><div><span>{ATTR_LABELS[key]} {priority >= 0 && <small>P{priority + 1}</small>}</span><strong>{career.player.attrs[key].toFixed(1)}</strong></div><i><b style={{ width: `${career.player.attrs[key]}%` }} /></i><em>{Math.round((WEIGHTS[career.player.position][key] ?? 0) * 100)}% OVR pozycji</em></article>; })}</div></>}
         {view === "club" && <><div className="v3-view-title"><p className="micro-label">SZATNIA • {squad.coach.formation} • {squad.coach.mentality.toUpperCase()}</p><h2>{squad.coach.name} ustala hierarchię.</h2></div><section className="v3-selection"><div className={`v3-selection-status role-${lineupDecision.role}`}><small>PROGNOZA NA MECZ</small><strong>{lineupDecision.role === "starter" ? "PIERWSZY SKŁAD" : lineupDecision.role === "bench" ? `ŁAWKA • WEJŚCIE OK. ${lineupDecision.predictedMinute}′` : "POZA KADRĄ"}</strong><p>{lineupDecision.reasons.join(" • ")}</p></div><div className="v3-coach"><span>TRENER</span><b>{squad.coach.name}</b><small>rygor {squad.coach.strictness}% • rotacja {squad.coach.rotation}%</small></div></section><div className="v3-squad-table"><header><span>ZAWODNIK</span><span>POZ.</span><span>OVR</span><span>FORMA</span><span>ZDROWIE</span><span>ROLA</span></header><div className="you"><span>{career.player.name}</span><span>{career.player.position}</span><b>{playerOvr.toFixed(1)}</b><span>{Math.round((career.energy+career.morale)/2)}</span><span>{availability.injuryWeeks ? `${availability.injuryWeeks} tyg.` : "100%"}</span><strong># {lineupDecision.positionRank}</strong></div>{squad.members.sort((a,b) => b.ovr-a.ovr).map((member) => <div key={member.id}><span>{member.name}</span><span>{member.position}</span><b>{member.ovr.toFixed(1)}</b><span>{Math.round(member.form)}</span><span>{member.injuryWeeks ? `${member.injuryWeeks} tyg.` : `${Math.round(member.fitness)}%`}</span><strong>{member.squadStatus}</strong></div>)}</div></>}
-        {view === "training" && <><div className="v3-view-title v3-training-title"><div><p className="micro-label">PLAN TYGODNIA</p><h2>Wybierz typ i intensywność.</h2></div><div>{(Object.keys(INTENSITY) as Intensity[]).map((key) => <button key={key} className={intensity === key ? "active" : ""} disabled={career.trainingDone} onClick={() => setIntensity(key)}>{INTENSITY[key].label}</button>)}</div></div><div className="v3-trainings">{TRAININGS.map((training) => { const impact = Object.entries(training.attrs).reduce((sum, [key, gain]) => sum + (gain ?? 0) * (WEIGHTS[career.player.position][key as AttrKey] ?? 0), 0) * INTENSITY[intensity].growth; const rank = [...TRAININGS].sort((a,b) => Object.entries(b.attrs).reduce((sum,[key,gain]) => sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)-Object.entries(a.attrs).reduce((sum,[key,gain])=>sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)).indexOf(training)+1; return <button key={training.id} disabled={career.trainingDone} onClick={() => train(training)}><FontAwesomeIcon icon={training.icon} /><div><small>{training.category}</small><strong>{training.title}</strong><p>{training.copy}</p></div><span>+{impact.toFixed(2)} OVR {rank <= 3 && <em>TOP {rank}</em>}</span><footer>{Object.entries(training.attrs).map(([key,gain]) => <b key={key}>+{((gain??0)*INTENSITY[intensity].growth).toFixed(2)} {ATTR_LABELS[key as AttrKey]}</b>)}<i className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{Math.round(training.energy*INTENSITY[intensity].cost)} energii</i></footer></button>; })}</div>{career.trainingDone && <div className="v3-done">PLAN ZREALIZOWANY • kolejny trening po meczu</div>}</>}
+        {view === "player" && <div className="v3-traits"><span>CECHY SPECJALNE</span>{(career.development?.traits.length ? career.development.traits : ["Jeszcze żadnej — zachowania budują profil"]).map((trait) => <b key={trait}>{trait}</b>)}</div>}
+        {view === "training" && <>
+          <div className="v3-view-title v3-training-title"><div><p className="micro-label">MIKROCYKL TYGODNIA</p><h2>Główny, uzupełniający i regeneracja.</h2></div><div>{(Object.keys(INTENSITY) as Intensity[]).map((key) => <button key={key} className={intensity === key ? "active" : ""} disabled={career.trainingDone} onClick={() => { setIntensity(key); setCareer({ ...career, development: setDevelopmentIntensity(career.development ?? emptyDevelopmentState(), key) }); }}>{INTENSITY[key].label}</button>)}</div></div>
+          <div className="v3-cycle-slots"><span><small>GŁÓWNY</small><b>{TRAININGS.find((item) => item.id === career.development?.plan.main)?.title ?? "wybierz"}</b></span><span><small>UZUPEŁNIAJĄCY</small><b>{TRAININGS.find((item) => item.id === career.development?.plan.supplementary)?.title ?? "opcjonalny"}</b></span><span><small>REGENERACJA</small><b>{TRAININGS.find((item) => item.id === career.development?.plan.recovery)?.title ?? "opcjonalna"}</b></span><button disabled={career.trainingDone || !career.development?.plan.main} onClick={executeMicrocycle}>REALIZUJ MIKROCYKL</button></div>
+          <div className="v3-trainings">{TRAININGS.map((training) => { const impact = Object.entries(training.attrs).reduce((sum, [key, gain]) => sum + (gain ?? 0) * (WEIGHTS[career.player.position][key as AttrKey] ?? 0), 0) * INTENSITY[intensity].growth; const rank = [...TRAININGS].sort((a,b) => Object.entries(b.attrs).reduce((sum,[key,gain]) => sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)-Object.entries(a.attrs).reduce((sum,[key,gain])=>sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)).indexOf(training)+1; const plan = career.development?.plan; const slot = plan?.main === training.id ? "GŁÓWNY" : plan?.supplementary === training.id ? "UZUPEŁNIAJĄCY" : plan?.recovery === training.id ? "REGENERACJA" : null; return <button key={training.id} className={slot ? "selected-session" : ""} disabled={career.trainingDone} onClick={() => chooseTraining(training)}><FontAwesomeIcon icon={training.icon} /><div><small>{training.category}</small><strong>{training.title}</strong><p>{training.copy}</p></div><span>+{impact.toFixed(2)} OVR {slot ? <em>{slot}</em> : rank <= 3 && <em>TOP {rank}</em>}</span><footer>{Object.entries(training.attrs).map(([key,gain]) => <b key={key}>+{((gain??0)*INTENSITY[intensity].growth).toFixed(2)} {ATTR_LABELS[key as AttrKey]}</b>)}<i className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{Math.round(training.energy*INTENSITY[intensity].cost)} energii</i></footer></button>; })}</div>
+          {career.trainingDone && <div className="v3-done">PLAN ZREALIZOWANY • obciążenie {career.development?.weeklyLoad ?? 0}% • kolejny mikrocykl po meczu</div>}
+        </>}
         {view === "world" && <><div className="v3-view-title"><p className="micro-label">{COUNTRY_NAMES[playerClub.country]} • {league.name}</p><h2>Świat: 8 krajów, 24 ligi, 384 kluby.</h2></div><div className="v3-world-summary">{world.countries.map((country) => <span key={country.code}><b>{country.code}</b>{country.name}<small>48 klubów</small></span>)}</div><div className="v3-table"><header><span>#</span><span>KLUB</span><span>M</span><span>BR</span><span>PKT</span></header>{sortedTable(league).map((row,index) => <div key={row.clubId} className={row.clubId === career.clubId ? "current" : ""}><span>{index+1}</span><span><i style={{ background: world.clubs[row.clubId].primary }}>{world.clubs[row.clubId].short}</i>{world.clubs[row.clubId].name}</span><span>{row.played}</span><span>{row.goalsFor}:{row.goalsAgainst}</span><strong>{row.points}</strong></div>)}</div></>}
       </section>
       <aside className="v3-next"><p className="micro-label"><FontAwesomeIcon icon={faCalendarDays} /> KOLEJKA {world.round}/30</p>{opponent ? <><div className="v3-versus"><i style={{ background: playerClub.primary }}>{playerClub.short}</i><span>VS</span><i style={{ background: opponent.primary }}>{opponent.short}</i></div><h2>{opponent.name}</h2><p>Siła rywala <strong>{opponent.strength.toFixed(1)}</strong><br />Decyzja trenera: <strong>{lineupDecision.role === "starter" ? "pierwszy skład" : lineupDecision.role === "bench" ? "ławka" : "poza kadrą"}</strong>.</p><div className={`v3-role-preview role-${lineupDecision.role}`}>#{lineupDecision.positionRank} na pozycji • zaufanie {Math.round(career.managerTrust)}%</div><button className="v3-primary" onClick={startMatch}>{career.trainingDone ? "JADĘ NA MECZ" : "GRAM BEZ TRENINGU"} <FontAwesomeIcon icon={faArrowRight} /></button></> : <p>Brak meczu w tej kolejce.</p>}</aside>
