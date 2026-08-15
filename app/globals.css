@@ -818,7 +818,7 @@ body { background:#071019; }
 .career-console .intensity-picker button:hover:not(:disabled) { color:#dfe7ed; background:rgba(255,255,255,.05); }
 .career-console .intensity-picker button.active { color:#111820; background:linear-gradient(135deg,var(--career-accent),#ffd36d); box-shadow:0 5px 14px rgba(243,170,33,.12); }
 .career-console .training-grid { height:calc(100% - 58px); grid-template-columns:repeat(4,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); gap:8px; }
-.career-console .training-card { gap:8px; padding:13px; }
+.career-console .training-card { grid-template-rows:auto 1fr auto auto; gap:8px; padding:13px; }
 .career-console .training-icon { flex-basis:39px; width:39px; height:39px; font-size:16px; }
 .career-console .training-card-top { gap:10px; }
 .career-console .training-card-top strong { font-size:12px; }
@@ -826,6 +826,20 @@ body { background:#071019; }
 .career-console .training-passing { --icon-color:#65b5ff; --icon-bg:rgba(101,181,255,.13); --card-glow:rgba(101,181,255,.1); }
 .career-console .training-defense { --icon-color:#45d998; --icon-bg:rgba(69,217,152,.13); --card-glow:rgba(69,217,152,.1); }
 .career-console .training-speed { --icon-color:#ff8c69; --icon-bg:rgba(255,140,105,.13); --card-glow:rgba(255,140,105,.1); }
+.career-console .training-ovr-impact { position:relative; z-index:1; align-self:flex-start; display:inline-flex; align-items:center; gap:5px; padding:4px 6px; border:1px solid rgba(255,255,255,.09); border-radius:6px; color:#cbd6de; background:rgba(6,14,22,.5); font:800 7px var(--font-montserrat),sans-serif; letter-spacing:.04em; }
+.career-console .training-ovr-impact em { color:#f3aa21; font-style:normal; }
+.career-console .training-card.training-impact-1,.career-console .training-card.training-impact-2,.career-console .training-card.training-impact-3 { box-shadow:inset 2px 0 0 color-mix(in srgb,var(--impact-color) 72%,transparent); }
+.career-console .training-card.training-impact-1 { --impact-color:#ffd15a; }
+.career-console .training-card.training-impact-2 { --impact-color:#91b9dc; }
+.career-console .training-card.training-impact-3 { --impact-color:#d98c62; }
+.career-console .training-effects b.key-gain { color:#fff0c2; border:1px solid rgba(243,170,33,.18); background:rgba(243,170,33,.08); }
+.career-console .training-effects b small { margin-left:2px; color:#f3aa21; font-size:6px; }
+
+.chance-stake { display:flex; align-items:center; flex-wrap:wrap; gap:7px; }
+.chance-stake span { padding:4px 7px; border-radius:6px; color:#aebac5; background:rgba(255,255,255,.045); }
+.chance-stake span:first-child { color:#dff6e9; background:rgba(69,217,152,.09); }
+.chance-stake span b { color:#fff; }
+.chance-stake small { margin-left:auto; color:#7f90a0; font-size:8px; }
 
 @media (max-width:1180px) and (min-width:761px) {
   .career-console .training-section-title h3 { font-size:14px; }

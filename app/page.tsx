@@ -89,7 +89,7 @@ type MatchState = {
   rating: number;
   stats: { goals: number; assists: number; saves: number; tackles: number; won: number };
   log: string[];
-  resolved: null | { success: boolean; text: string };
+  resolved: null | { success: boolean; minigameSuccess: boolean; chance: number; text: string };
   finished: boolean;
 };
 
@@ -228,6 +228,28 @@ function ovr(player: Player) {
   return Math.round(value * 10) / 10;
 }
 
+function actionSuccessChance(minigameSuccess: boolean, playerOvr: number, opponentOvr: number) {
+  const difference = playerOvr - opponentOvr;
+  const probability = minigameSuccess ? 0.94 + difference * 0.002 : 0.06 + difference * 0.0025;
+  return Math.round(clamp(probability * 100, minigameSuccess ? 88 : 1, minigameSuccess ? 98 : 18));
+}
+
+function calculateTraining(career: Career, training: (typeof TRAININGS)[number], intensityId: TrainingIntensity, includeHiddenTalent = true) {
+  const intensity = TRAINING_INTENSITIES[intensityId];
+  const talent = includeHiddenTalent ? HIDDEN_TALENTS[career.player.hiddenTalent] : HIDDEN_TALENTS.none;
+  const multiplier = (0.75 + career.professionalism / 180) * (career.energy < 35 ? 0.62 : 1) * career.facilities * DIFFICULTIES[career.difficulty].growth;
+  const attrs = { ...career.player.attrs };
+  let ovrGain = 0;
+  Object.entries(training.gains).forEach(([key, gain]) => {
+    const attr = key as AttrKey;
+    const talentBoost = talent.keys.includes(attr) ? talent.multiplier : 1;
+    const nextValue = clamp(attrs[attr] + gain * multiplier * talentBoost * intensity.growth, 1, career.player.potential);
+    ovrGain += (nextValue - attrs[attr]) * (WEIGHTS[career.player.position][attr] ?? 0);
+    attrs[attr] = nextValue;
+  });
+  return { attrs, ovrGain, energy: Math.round(training.energy * intensity.energy), morale: training.morale + intensity.morale };
+}
+
 function initialAttributes(position: Position, targetOvr = 47, style: PlayStyle = "Technik"): Attributes {
   const common: Attributes = { technika: 43, strzal: 39, podania: 41, drybling: 42, odbior: 38, szybkosc: 46, sila: 40, kondycja: 45, refleks: 40 };
   const boosts: Record<Position, Partial<Attributes>> = {
@@ -301,7 +323,7 @@ function buildActions(position: Position): MatchAction[] {
   return attack;
 }
 
-function MiniGame({ action, player, difficulty, onResolve }: { action: MatchAction; player: Player; difficulty: Difficulty; onResolve: (success: boolean) => void }) {
+function MiniGame({ action, player, difficulty, successChance, onResolve }: { action: MatchAction; player: Player; difficulty: Difficulty; successChance: number; onResolve: (success: boolean) => void }) {
   const skill = player.attrs[action.skill];
   const [ready, setReady] = useState(false);
   const [cursor, setCursor] = useState(4);
@@ -386,7 +408,7 @@ function MiniGame({ action, player, difficulty, onResolve }: { action: MatchActi
     <div className="minigame">
       <div className="minigame-head">
         <span className="micro-label">MINIGRA • {ATTR_LABELS[action.skill].toUpperCase()} {Math.round(skill)}</span>
-        <span className="real-impact">BEZPOŚREDNI WPŁYW</span>
+        <span className="real-impact">{successChance}% PO DOBREJ MINIGRZE</span>
       </div>
 
       {!ready && (
@@ -527,17 +549,9 @@ export default function Home() {
 
   const applyTraining = (training: (typeof TRAININGS)[number]) => {
     if (!career || career.trainingDone) return;
-    const talent = HIDDEN_TALENTS[career.player.hiddenTalent];
-    const intensity = TRAINING_INTENSITIES[trainingIntensity];
-    const multiplier = (0.75 + career.professionalism / 180) * (career.energy < 35 ? 0.62 : 1) * career.facilities * DIFFICULTIES[career.difficulty].growth;
-    const attrs = { ...career.player.attrs };
-    Object.entries(training.gains).forEach(([key, gain]) => {
-      const attr = key as AttrKey;
-      const talentBoost = talent.keys.includes(attr) ? talent.multiplier : 1;
-      attrs[attr] = clamp(attrs[attr] + gain * multiplier * talentBoost * intensity.growth, 1, career.player.potential);
-    });
+    const result = calculateTraining(career, training, trainingIntensity);
     const nextTrainingCount = career.trainingCount + 1;
-    setCareer({ ...career, player: { ...career.player, attrs }, energy: clamp(career.energy + Math.round(training.energy * intensity.energy)), morale: clamp(career.morale + training.morale + intensity.morale), trainingDone: true, trainingCount: nextTrainingCount, hiddenRevealed: career.hiddenRevealed || nextTrainingCount >= 3 });
+    setCareer({ ...career, player: { ...career.player, attrs: result.attrs }, energy: clamp(career.energy + result.energy), morale: clamp(career.morale + result.morale), trainingDone: true, trainingCount: nextTrainingCount, hiddenRevealed: career.hiddenRevealed || nextTrainingCount >= 3 });
   };
 
   const startMatch = () => {
@@ -546,16 +560,23 @@ export default function Home() {
     setMatch({ opponent, actions: buildActions(career.player.position), index: 0, minute: 1, us: 0, them: 0, rating: 6, stats: { goals: 0, assists: 0, saves: 0, tackles: 0, won: 0 }, log: ["1′ Sędzia sprawdził zegarek. Działa. Gramy!"], resolved: null, finished: false });
   };
 
-  const resolveAction = (success: boolean) => {
+  const resolveAction = (minigameSuccess: boolean) => {
     if (!career || !match || match.resolved) return;
     const action = match.actions[match.index];
+    const chance = actionSuccessChance(minigameSuccess, ovr(career.player), match.opponent.strength);
+    const success = Math.random() * 100 < chance;
     const result = success ? action.success : action.fail;
     let us = match.us + (result.us ?? 0);
     let them = match.them + (result.them ?? 0);
-    const log = [`${action.minute}′ ${result.text}`, ...match.log];
+    const varianceNote = minigameSuccess && !success
+      ? `Zrobiłeś wszystko dobrze, ale rywal wygrał pozostałe ${100 - chance}% tej akcji. `
+      : !minigameSuccess && success
+        ? `Minigra nie wyszła, lecz przewaga jakości uratowała ${chance}% szans. `
+        : "";
+    const resultText = `${varianceNote}${result.text}`;
+    const log = [`${action.minute}′ ${resultText}`, ...match.log];
 
-    // Pełny silnik rozgrywa także akcje pozostałych 21 zawodników. Wynik minigry
-    // pozostaje deterministyczny; ten fragment odpowiada wyłącznie za tło meczu.
+    // Pełny silnik rozgrywa także akcje pozostałych 21 zawodników.
     if (match.index === 2 || match.index === 5) {
       const engineRoll = (career.week * 31 + match.index * 19 + Math.round(ovr(career.player))) % 100;
       const strengthGap = ovr(career.player) * 0.45 + career.teamStrength * 0.55 - match.opponent.strength;
@@ -571,11 +592,11 @@ export default function Home() {
     }
 
     setMatch({
-      ...match, minute: action.minute, us, them, log, resolved: { success, text: result.text },
-      rating: clamp(match.rating + (success ? 0.48 : -0.27), 1, 10),
+      ...match, minute: action.minute, us, them, log, resolved: { success, minigameSuccess, chance, text: resultText },
+      rating: clamp(match.rating + (minigameSuccess ? 0.38 : -0.22) + (success ? 0.1 : -0.05), 1, 10),
       stats: {
         goals: match.stats.goals + (result.goal ?? 0), assists: match.stats.assists + (result.assist ?? 0),
-        saves: match.stats.saves + (result.save ?? 0), tackles: match.stats.tackles + (result.tackle ?? 0), won: match.stats.won + (success ? 1 : 0),
+        saves: match.stats.saves + (result.save ?? 0), tackles: match.stats.tackles + (result.tackle ?? 0), won: match.stats.won + (minigameSuccess ? 1 : 0),
       },
     });
   };
@@ -701,6 +722,9 @@ export default function Home() {
 
   if (match) {
     const action = match.actions[match.index];
+    const playerMatchOvr = ovr(career.player);
+    const goodActionChance = actionSuccessChance(true, playerMatchOvr, match.opponent.strength);
+    const recoveryChance = actionSuccessChance(false, playerMatchOvr, match.opponent.strength);
     return (
       <main className="match-screen">
         <div className="stadium-art match-stadium-art" aria-hidden="true" />
@@ -725,14 +749,14 @@ export default function Home() {
                 <div className="minute-stamp">{action.minute}′</div>
                 <p className="micro-label">KLUCZOWA AKCJA {match.index + 1}/{match.actions.length}</p>
                 <h1>{action.title}</h1><p className="action-flavor">{action.flavor}</p>
-                <div className="stake">STAWKA: {action.stake}</div>
-                <MiniGame key={action.id} action={action} player={career.player} difficulty={career.difficulty} onResolve={resolveAction} />
+                <div className="stake chance-stake"><span><b>{goodActionChance}%</b> po dobrej minigrze</span><span><b>{recoveryChance}%</b> po błędzie</span><small>OVR {playerMatchOvr.toFixed(1)} vs OVR składu {match.opponent.strength}</small></div>
+                <MiniGame key={action.id} action={action} player={career.player} difficulty={career.difficulty} successChance={goodActionChance} onResolve={resolveAction} />
               </>
             )}
             {match.resolved && !match.finished && (
               <div className={`result-card ${match.resolved.success ? "success" : "fail"}`}>
-                <p>{match.resolved.success ? "AKCJA UDANA" : "AKCJA PRZEGRANA"}</p>
-                <h1>{match.resolved.success ? "TO BYŁO TWOJE." : "NA POWTÓRCE WYGLĄDA GORZEJ."}</h1>
+                <p>{match.resolved.minigameSuccess ? "MINIGRA WYGRANA" : "MINIGRA PRZEGRANA"} • {match.resolved.chance}% SZANS</p>
+                <h1>{match.resolved.minigameSuccess ? match.resolved.success ? "DOBRZE ZROBIONE. I DOWIEZIONE." : "ZROBIŁEŚ SWOJE. RYWAL MIAŁ SWÓJ MOMENT." : match.resolved.success ? "BŁĄD, ALE JAKIMŚ CUDEM URATOWANE." : "NA POWTÓRCE WYGLĄDA GORZEJ."}</h1>
                 <div className="result-copy">{match.resolved.text}</div>
                 <strong className="result-score">WYNIK TERAZ: {match.us}:{match.them}</strong>
                 <button className="action-button" onClick={continueMatch}>{match.index === match.actions.length - 1 ? "KOŃCZ TEN MECZ" : "GRAMY DALEJ"} →</button>
@@ -761,6 +785,14 @@ export default function Home() {
     .sort((first, second) => (WEIGHTS[career.player.position][second] ?? 0) - (WEIGHTS[career.player.position][first] ?? 0))
     .slice(0, 3);
   const priorityRank = new Map(attributePriorities.map((key, index) => [key, index + 1]));
+  const trainingForecasts = new Map(TRAININGS.map((training) => [training.id, calculateTraining(career, training, trainingIntensity, career.hiddenRevealed)]));
+  const trainingImpactRank = new Map(
+    [...TRAININGS]
+      .sort((first, second) => (trainingForecasts.get(second.id)?.ovrGain ?? 0) - (trainingForecasts.get(first.id)?.ovrGain ?? 0))
+      .slice(0, 3)
+      .map((training, index) => [training.id, index + 1]),
+  );
+  const nextMatchGoodChance = actionSuccessChance(true, currentOvr, nextOpponent.strength);
 
   return (
     <main className="career-screen career-console">
@@ -806,13 +838,16 @@ export default function Home() {
 
           {careerView === "training" && <section className="training-section focused-section">
             <div className="section-title training-section-title"><div><p className="micro-label">PLAN TYGODNIA</p><h3>Wybierz typ i intensywność.</h3></div><div className="training-heading-actions"><span className={career.trainingDone ? "done-chip" : "open-chip"}>{career.trainingDone ? "PLAN ZREALIZOWANY" : "WYBIERZ TRENING"}</span><div className="intensity-picker" role="group" aria-label="Intensywność treningu">{(Object.entries(TRAINING_INTENSITIES) as Array<[TrainingIntensity, (typeof TRAINING_INTENSITIES)[TrainingIntensity]]>).map(([id, intensity]) => <button key={id} type="button" title={intensity.copy} disabled={career.trainingDone} className={trainingIntensity === id ? "active" : ""} onClick={() => setTrainingIntensity(id)}>{intensity.label}</button>)}</div></div></div>
-            <div className="training-grid">{TRAININGS.map((training) => (
-              <button key={training.id} disabled={career.trainingDone} className={`training-card training-${training.id}`} onClick={() => applyTraining(training)}>
+            <div className="training-grid">{TRAININGS.map((training) => {
+              const forecast = trainingForecasts.get(training.id)!;
+              const impactRank = trainingImpactRank.get(training.id);
+              return <button key={training.id} disabled={career.trainingDone} className={`training-card training-${training.id} ${impactRank ? `training-impact-${impactRank}` : ""}`} onClick={() => applyTraining(training)}>
                 <div className="training-card-top"><span className="training-icon"><FontAwesomeIcon icon={TRAINING_ICONS[training.id]} /></span><div><small>{training.eyebrow}</small><strong>{training.title}</strong></div></div>
                 <p>{training.copy}</p>
-                <div className="training-effects">{Object.entries(training.gains).map(([key, gain]) => { const adjustedGain = Number((gain * TRAINING_INTENSITIES[trainingIntensity].growth).toFixed(2)); return <b key={key}>+{adjustedGain} {ATTR_LABELS[key as AttrKey]}</b>; })}<em className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{Math.round(training.energy * TRAINING_INTENSITIES[trainingIntensity].energy)} energii</em></div>
-              </button>
-            ))}</div>
+                <span className="training-ovr-impact">+{forecast.ovrGain.toFixed(2)} OVR {impactRank && <em>TOP {impactRank}</em>}</span>
+                <div className="training-effects">{Object.entries(training.gains).map(([key, gain]) => { const attr = key as AttrKey; const adjustedGain = Number((gain * TRAINING_INTENSITIES[trainingIntensity].growth).toFixed(2)); const priority = priorityRank.get(attr); return <b key={key} className={priority ? "key-gain" : ""}>+{adjustedGain} {ATTR_LABELS[attr]} {priority && <small>P{priority}</small>}</b>; })}<em className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{forecast.energy} energii</em></div>
+              </button>;
+            })}</div>
           </section>}
 
           {careerView === "player" && <section className="attributes-section focused-section">
@@ -828,8 +863,8 @@ export default function Home() {
         </section>
 
         <aside className="next-match-panel">
-          <p className="micro-label"><FontAwesomeIcon icon={faTrophy} /> NASTĘPNY MECZ • {career.matchIndex + 1}/{OPPONENTS.length}</p><div className="versus"><div className="mini-crest">{career.player.club.slice(0, 2).toUpperCase()}</div><span>VS</span><div className="mini-crest opponent" style={{ background: nextOpponent.color }}>{nextOpponent.short.slice(0, 2)}</div></div><h2>{nextOpponent.name}</h2><p>Siła rywala <strong>{nextOpponent.strength}</strong><br />Twoja forma zależy od energii i minigier.</p>
-          <div className="impact-note"><strong>TU NIE MA „+5% SZANS”.</strong><p>Udany strzał daje gola. Udana obrona kasuje gola. Dobra asysta zmienia wynik na tablicy.</p></div>
+          <p className="micro-label"><FontAwesomeIcon icon={faTrophy} /> NASTĘPNY MECZ • {career.matchIndex + 1}/{OPPONENTS.length}</p><div className="versus"><div className="mini-crest">{career.player.club.slice(0, 2).toUpperCase()}</div><span>VS</span><div className="mini-crest opponent" style={{ background: nextOpponent.color }}>{nextOpponent.short.slice(0, 2)}</div></div><h2>{nextOpponent.name}</h2><p>OVR składu rywala <strong>{nextOpponent.strength}</strong><br />Twoja forma zależy od energii i minigier.</p>
+          <div className="impact-note"><strong>DOBRA MINIGRA: {nextMatchGoodChance}% SZANS.</strong><p>To niemal gwarancja, ale OVR zawodnika i składu rywala zostawiają miejsce na piłkarskie cuda.</p></div>
           <button className="match-button" onClick={startMatch} disabled={showDecision}>{showDecision ? "NAJPIERW DECYZJA" : career.trainingDone ? "WYCHODZĘ NA BOISKO" : "GRAM BEZ TRENINGU"}<span>→</span></button>
         </aside>
       </section>
