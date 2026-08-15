@@ -601,6 +601,7 @@ export default function Home() {
     const previewPlayer: Player = { name, position, foot, number: 8, club, potential: selectedLevel.potential, attrs: initialAttributes(position, selectedLevel.ovr, style), style, hiddenTalent: "none" };
     return (
       <main className="start-screen">
+        <div className="stadium-art start-stadium-art" aria-hidden="true" />
         <header className="brand-bar"><div className="brand-mark">P:N:P</div><div>PIŁKARZ: NA PEŁNEJ</div><span>wersja boiskowa 0.1</span></header>
         <section className="hero">
           <div className="hero-copy">
@@ -653,6 +654,7 @@ export default function Home() {
     const action = match.actions[match.index];
     return (
       <main className="match-screen">
+        <div className="stadium-art match-stadium-art" aria-hidden="true" />
         <header className="match-top"><div className="brand-mark">P:N:P</div><div className="competition">LIGA WIELKICH NADZIEI <span>• MECZ {career.matchIndex + 1}/{OPPONENTS.length}</span></div><button className="quiet-button" onClick={() => setMatch(null)}>PRZERWIJ MECZ</button></header>
         <section className="scoreboard">
           <div className="team home"><div className="crest">{career.player.club.slice(0, 2).toUpperCase()}</div><div><span>GOSPODARZE</span><strong>{career.player.club}</strong></div></div>
@@ -710,6 +712,17 @@ export default function Home() {
   return (
     <main className="career-screen">
       <header className="career-top"><div className="brand-lockup"><div className="brand-mark">P:N:P</div><strong>PIŁKARZ: NA PEŁNEJ</strong></div><div className="season-chip">SEZON {career.season} • TYDZIEŃ {career.week}</div><button className="quiet-button" onClick={reset}>NOWA KARIERA</button></header>
+      <nav className="game-nav" aria-label="Główna nawigacja kariery">
+        <button className="active"><span>01</span>KARIERA</button>
+        <button><span>02</span>ZAWODNIK</button>
+        <button><span>03</span>TRENING</button>
+        <button><span>04</span>TERMINARZ</button>
+        <div className="resource-strip">
+          <div><span className="resource-icon energy-icon">E</span><small>ENERGIA</small><strong>{Math.round(career.energy)}</strong></div>
+          <div><span className="resource-icon media-icon">M</span><small>ROZGŁOS</small><strong>{Math.round(career.media)}</strong></div>
+          <div><span className="resource-icon money-icon">ZŁ</span><small>KONTO</small><strong>{Math.round(career.money / 1000)}K</strong></div>
+        </div>
+      </nav>
       <section className="career-grid">
         <aside className="profile-panel">
           <div className="profile-shirt"><span>{career.player.number}</span><small>{career.player.club.slice(0, 3).toUpperCase()}</small></div>
