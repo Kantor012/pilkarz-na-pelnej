@@ -18,6 +18,7 @@ type GameKind = "timing" | "choice" | "sequence" | "reaction";
 type Difficulty = "Niedzielny" | "Normalny" | "Bez litości";
 type PlayStyle = "Technik" | "Sprinter" | "Dyrygent" | "Egzekutor" | "Walczak" | "Profesor";
 type HiddenTalent = "touch" | "engine" | "vision" | "killer" | "worker" | "none";
+type CareerView = "career" | "player" | "training" | "schedule";
 
 type Player = {
   name: string;
@@ -448,6 +449,7 @@ export default function Home() {
   const [personality, setPersonality] = useState<keyof typeof PERSONALITIES>("swojak");
   const [difficulty, setDifficulty] = useState<Difficulty>("Normalny");
   const [hiddenMode, setHiddenMode] = useState("mystery");
+  const [careerView, setCareerView] = useState<CareerView>("career");
 
   useEffect(() => {
     const saved = window.localStorage.getItem("pilkarz-na-pelnej-save-v2");
@@ -721,10 +723,10 @@ export default function Home() {
     <main className="career-screen">
       <header className="career-top"><div className="brand-lockup"><div className="brand-mark">P:N:P</div><strong>PIŁKARZ: NA PEŁNEJ</strong></div><div className="season-chip">SEZON {career.season} • TYDZIEŃ {career.week}</div><button className="quiet-button" onClick={reset}>NOWA KARIERA</button></header>
       <nav className="game-nav" aria-label="Główna nawigacja kariery">
-        <button className="active"><span>01</span>KARIERA</button>
-        <button><span>02</span>ZAWODNIK</button>
-        <button><span>03</span>TRENING</button>
-        <button><span>04</span>TERMINARZ</button>
+        <button className={careerView === "career" ? "active" : ""} onClick={() => setCareerView("career")}><span>01</span>KARIERA</button>
+        <button className={careerView === "player" ? "active" : ""} onClick={() => setCareerView("player")}><span>02</span>ZAWODNIK</button>
+        <button className={careerView === "training" ? "active" : ""} onClick={() => setCareerView("training")}><span>03</span>TRENING</button>
+        <button className={careerView === "schedule" ? "active" : ""} onClick={() => setCareerView("schedule")}><span>04</span>TERMINARZ</button>
         <div className="resource-strip">
           <div><span className="resource-icon energy-icon">E</span><small>ENERGIA</small><strong>{Math.round(career.energy)}</strong></div>
           <div><span className="resource-icon media-icon">M</span><small>ROZGŁOS</small><strong>{Math.round(career.media)}</strong></div>
@@ -746,13 +748,20 @@ export default function Home() {
         </aside>
 
         <section className="dashboard">
-          <div className="welcome-row"><div><p className="kicker">CENTRUM DOWODZENIA</p><h2>{career.trainingDone ? "Trening zrobiony. Czas udowodnić, że coś dał." : "Co robimy przed kolejnym meczem?"}</h2></div><div className="record"><span>KARIERA</span><strong>{career.totals.matches} M • {career.totals.goals} G • {career.totals.assists} A • {career.totals.saves} O</strong></div></div>
+          <div className="welcome-row"><div><p className="kicker">{careerView === "career" ? "CENTRUM KARIERY" : careerView === "player" ? "KARTA ZAWODNIKA" : careerView === "training" ? "PLAN TYGODNIA" : "TERMINARZ"}</p><h2>{careerView === "career" ? "Jedna decyzja naraz. Bez tablicy w rozmiarze znaczka." : careerView === "player" ? `Skąd bierze się OVR ${currentOvr.toFixed(1)}?` : careerView === "training" ? career.trainingDone ? "Trening wykonany. Nogi bolą prawidłowo." : "Wybierz jeden konkretny trening." : "Droga przez ligę wielkich nadziei."}</h2></div><div className="record"><span>KARIERA</span><strong>{career.totals.matches} M • {career.totals.goals} G • {career.totals.assists} A • {career.totals.saves} O</strong></div></div>
 
           {showDecision && (
             <section className="decision-banner"><div><p className="micro-label">DECYZJA TYGODNIA • SKUTKI SĄ PEWNE</p><h3>{career.week % 6 === 3 ? "Kebab „U Prezesa” chce sponsorować twoją lewą łydkę." : "Trener proponuje dodatkowy trening w niedzielę o 6:15."}</h3></div><div className="decision-buttons"><button onClick={() => takeDecision("fun")}>{career.week % 6 === 3 ? "BIORĘ 3400 ZŁ" : "WYBIERAM ROSÓŁ"}<small>{career.week % 6 === 3 ? "+12 medialność • −3 profesjonalizm" : "+15 energia • +5 medialność"}</small></button><button onClick={() => takeDecision("pro")}>{career.week % 6 === 3 ? "ODMAWIAM" : "IDĘ NA TRENING"}<small>{career.week % 6 === 3 ? "+4 profesjonalizm" : "+5 profesjonalizm • −9 energia"}</small></button></div></section>
           )}
 
-          <section className="training-section">
+          {careerView === "career" && (
+            <section className="career-overview">
+              <div className="overview-primary"><p className="micro-label">NAJWAŻNIEJSZE TERAZ</p><h3>{career.trainingDone ? "Plan wykonany. Możesz wychodzić na boisko." : "Masz jeden trening przed kolejnym meczem."}</h3><p>{career.trainingDone ? `Energia ${Math.round(career.energy)}%. Rywal: ${nextOpponent.name}.` : "Wybierz rozwój, który naprawdę zmieni atrybuty i przyszły OVR."}</p><div><button onClick={() => setCareerView("training")}>{career.trainingDone ? "ZOBACZ PLAN" : "WYBIERAM TRENING"} →</button><button onClick={() => setCareerView("player")}>SPRAWDZAM OVR</button></div></div>
+              <div className="overview-stats"><article><span>OVR</span><strong>{currentOvr.toFixed(1)}</strong><small>potencjał {career.player.potential}</small></article><article><span>FORMA</span><strong>{Math.round((career.energy + career.morale) / 2)}%</strong><small>energia + morale</small></article><article><span>MECZE</span><strong>{career.totals.matches}</strong><small>{career.totals.goals} gole • {career.totals.assists} asysty</small></article><article><span>TYDZIEŃ</span><strong>{career.week}</strong><small>sezon {career.season}</small></article></div>
+            </section>
+          )}
+
+          {careerView === "training" && <section className="training-section focused-section">
             <div className="section-title"><div><p className="micro-label">PLAN TYGODNIA</p><h3>Jeden wybór. Konkretne liczby.</h3></div><span className={career.trainingDone ? "done-chip" : "open-chip"}>{career.trainingDone ? "PLAN ZREALIZOWANY" : "WYBIERZ TRENING"}</span></div>
             <div className="training-grid">{TRAININGS.map((training) => (
               <button key={training.id} disabled={career.trainingDone} className="training-card" onClick={() => applyTraining(training)}>
@@ -760,15 +769,17 @@ export default function Home() {
                 <div>{Object.entries(training.gains).map(([key, gain]) => <b key={key}>+{gain} {ATTR_LABELS[key as AttrKey]}</b>)}<em className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{training.energy} energii</em></div>
               </button>
             ))}</div>
-          </section>
+          </section>}
 
-          <section className="attributes-section">
+          {careerView === "player" && <section className="attributes-section focused-section">
             <div className="section-title"><div><p className="micro-label">TWOJE LICZBY</p><h3>Skąd bierze się OVR {currentOvr.toFixed(1)}?</h3></div><span className="formula-chip">SUMA WAŻONA DLA POZYCJI</span></div>
             <div className="attributes-grid">{(Object.keys(career.player.attrs) as AttrKey[]).map((key) => {
               const value = career.player.attrs[key]; const weight = WEIGHTS[career.player.position][key] ?? 0;
               return <div className={`attribute ${weight >= 0.15 ? "key-attribute" : ""}`} key={key}><div><span>{ATTR_LABELS[key]}</span>{weight > 0 && <small>{Math.round(weight * 100)}% OVR</small>}<strong>{value.toFixed(1)}</strong></div><i><b style={{ width: `${value}%` }} /></i></div>;
             })}</div>
-          </section>
+          </section>}
+
+          {careerView === "schedule" && <section className="schedule-section focused-section"><div className="section-title"><div><p className="micro-label">SEZON {career.season}</p><h3>Sześć kolejek, zero łatwych wymówek.</h3></div><span className="formula-chip">KOLEJKA {career.matchIndex + 1}/{OPPONENTS.length}</span></div><div className="schedule-list">{OPPONENTS.map((opponent, index) => <article key={opponent.short} className={index < career.matchIndex ? "played" : index === career.matchIndex ? "current" : ""}><span>{String(index + 1).padStart(2, "0")}</span><div className="mini-crest opponent" style={{ background: opponent.color }}>{opponent.short.slice(0, 2)}</div><div><strong>{opponent.name}</strong><small>Siła zespołu {opponent.strength}</small></div><b>{index < career.matchIndex ? "ROZEGRANY" : index === career.matchIndex ? "NASTĘPNY" : "WKRÓTCE"}</b></article>)}</div></section>}
         </section>
 
         <aside className="next-match-panel">
