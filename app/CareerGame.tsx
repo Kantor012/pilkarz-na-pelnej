@@ -1,0 +1,311 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faArrowRight, faArrowsLeftRight, faBed, faBolt, faBullseye, faCalendarDays, faChartLine,
+  faCirclePlay, faClock, faCoins, faDumbbell, faFutbol, faGaugeHigh, faGlobeEurope,
+  faHand, faHeartPulse, faHouse, faPause, faPlay, faShieldHalved, faStar, faTableList,
+  faUser, faWandMagicSparkles,
+} from "@fortawesome/free-solid-svg-icons";
+import MatchPitch from "./MatchPitch";
+import { SaveRepository } from "../game/save-repository";
+import {
+  advanceMatch, continueAfterAction, createMatch, opportunityChanceRange, roleLabel,
+  setMatchSpeed, submitAction,
+} from "../game/match-engine";
+import {
+  advanceWorldWeek, createWorld, currentFixtureForClub, findClubByName, recordFixtureResult,
+  seedForNewCareer, sortedTable,
+} from "../game/world";
+import type {
+  AttrKey, Attributes, CountryCode, InteractiveOpportunity, MatchSimulationState,
+  Position, SaveGameV3, WorldState,
+} from "../game/types";
+
+type View = "home" | "player" | "training" | "world";
+type Intensity = "lekki" | "normalny" | "mocny";
+type Career = {
+  player: { name: string; position: Position; foot: "Prawa" | "Lewa"; number: number; attrs: Attributes; potential: number; style: string };
+  age: number;
+  nationality: CountryCode;
+  clubId: string;
+  leagueId: string;
+  season: number;
+  week: number;
+  energy: number;
+  morale: number;
+  managerTrust: number;
+  money: number;
+  trainingDone: boolean;
+  hiddenTalent: string;
+  hiddenRevealed: boolean;
+  trainingCount: number;
+  totals: { matches: number; goals: number; assists: number; saves: number; rating: number };
+};
+
+const COUNTRY_NAMES: Record<CountryCode, string> = { PL: "Polska", DE: "Niemcy", IT: "Włochy", NL: "Holandia", FR: "Francja", EN: "Anglia", PT: "Portugalia", ES: "Hiszpania" };
+const ATTR_LABELS: Record<AttrKey, string> = { technika: "Technika", strzal: "Strzał", podania: "Podania", drybling: "Drybling", odbior: "Odbiór", szybkosc: "Szybkość", sila: "Siła", kondycja: "Kondycja", refleks: "Refleks" };
+const WEIGHTS: Record<Position, Partial<Record<AttrKey, number>>> = {
+  Napastnik: { strzal: .26, technika: .16, drybling: .16, szybkosc: .14, sila: .1, podania: .07, kondycja: .07, refleks: .04 },
+  Pomocnik: { podania: .24, technika: .2, drybling: .15, kondycja: .13, odbior: .09, szybkosc: .07, strzal: .07, sila: .05 },
+  Obrońca: { odbior: .27, sila: .2, kondycja: .13, szybkosc: .11, podania: .1, technika: .08, refleks: .06, drybling: .05 },
+  Bramkarz: { refleks: .34, technika: .16, podania: .13, sila: .12, kondycja: .09, szybkosc: .07, odbior: .05, drybling: .04 },
+};
+const ATTR_ICONS = { technika: faFutbol, strzal: faBullseye, podania: faArrowsLeftRight, drybling: faGaugeHigh, odbior: faShieldHalved, szybkosc: faBolt, sila: faDumbbell, kondycja: faHeartPulse, refleks: faHand };
+const START_CLUBS = ["LKS Drobny Druk", "Betonowianka Betonów", "KS Chrząszczyżewko", "LKS Paragon", "Orzeł Niedziela", "Naprzód Po Wypłatę", "Turbo Pogoń II"];
+const START_LEVELS = [
+  { value: 34, label: "Podwórko", potential: 83 }, { value: 42, label: "B-klasowy kozak", potential: 85 },
+  { value: 50, label: "Akademia", potential: 87 }, { value: 58, label: "Kadra województwa", potential: 89 },
+  { value: 65, label: "Wonderkid", potential: 92 },
+];
+const STYLES = ["Technik", "Sprinter", "Dyrygent", "Egzekutor", "Walczak", "Profesor"];
+const TALENTS = ["Złoty dotyk", "Silnik z diesla", "Skaner boiska", "Instynkt killera", "Pracoholik", "Losowy — odkryj po 3 treningach"];
+const TRAININGS: Array<{ id: string; title: string; category: string; copy: string; attrs: Partial<Attributes>; energy: number; icon: typeof faFutbol }> = [
+  { id: "ball", title: "Pachołki i fantazja", category: "TECHNIKA", copy: "Sześć pachołków. Ty omijasz siedem.", attrs: { technika: .8, drybling: .7, podania: .25 }, energy: -11, icon: faFutbol },
+  { id: "finish", title: "Sto strzałów", category: "ATAK", copy: "Dwa nagrane. Reszta w płot.", attrs: { strzal: 1.05, technika: .35, sila: .25 }, energy: -14, icon: faBullseye },
+  { id: "gym", title: "Siłownia bez selfie", category: "FIZYCZNOŚĆ", copy: "Rzadki trening, na którym ćwiczysz.", attrs: { sila: .9, kondycja: .65, szybkosc: .25 }, energy: -16, icon: faDumbbell },
+  { id: "tactics", title: "Wideo z trenerem", category: "GŁOWA", copy: "80 minut pauzowania pilota.", attrs: { odbior: .65, podania: .65, refleks: .45 }, energy: -7, icon: faTableList },
+  { id: "passing", title: "Radar na dwa kontakty", category: "PODANIA", copy: "Piłka szybciej niż plotki o premii.", attrs: { podania: 1, technika: .35, refleks: .2 }, energy: -10, icon: faArrowsLeftRight },
+  { id: "defense", title: "Wślizgi bez przeprosin", category: "OBRONA", copy: "Najpierw piłka. Tak wpisano w planie.", attrs: { odbior: 1, sila: .35, kondycja: .25 }, energy: -13, icon: faShieldHalved },
+  { id: "speed", title: "Sprint do autobusu", category: "SZYBKOŚĆ", copy: "Ostatni kurs. Motywacja prawdziwa.", attrs: { szybkosc: 1, kondycja: .45, drybling: .2 }, energy: -15, icon: faBolt },
+  { id: "recovery", title: "Rosół i sen", category: "REGENERACJA", copy: "Zatwierdzone przez babcię i fizjo.", attrs: { kondycja: .2 }, energy: 24, icon: faBed },
+];
+const INTENSITY: Record<Intensity, { label: string; growth: number; cost: number }> = {
+  lekki: { label: "LEKKI", growth: .72, cost: .62 }, normalny: { label: "NORMALNY", growth: 1, cost: 1 }, mocny: { label: "MOCNY", growth: 1.34, cost: 1.4 },
+};
+
+const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
+function calculateOvr(position: Position, attrs: Attributes) {
+  return Math.round(Object.entries(WEIGHTS[position]).reduce((sum, [key, weight]) => sum + attrs[key as AttrKey] * (weight ?? 0), 0) * 10) / 10;
+}
+function initialAttributes(position: Position, target: number, style: string): Attributes {
+  const attrs: Attributes = { technika: 43, strzal: 39, podania: 41, drybling: 42, odbior: 38, szybkosc: 46, sila: 40, kondycja: 45, refleks: 40 };
+  const positionBoosts: Record<Position, Partial<Attributes>> = {
+    Napastnik: { strzal: 54, drybling: 49, szybkosc: 51, odbior: 28 }, Pomocnik: { podania: 53, technika: 50, drybling: 48, kondycja: 50 },
+    Obrońca: { odbior: 55, sila: 52, kondycja: 49, strzal: 30 }, Bramkarz: { refleks: 57, technika: 45, podania: 46, strzal: 23 },
+  };
+  Object.assign(attrs, positionBoosts[position]);
+  const styleBoosts: Record<string, Partial<Attributes>> = { Technik: { technika: 5, drybling: 4 }, Sprinter: { szybkosc: 6, kondycja: 2 }, Dyrygent: { podania: 6, technika: 2 }, Egzekutor: { strzal: 6, sila: 2 }, Walczak: { odbior: 5, sila: 4 }, Profesor: { refleks: 4, podania: 3, odbior: 3 } };
+  Object.entries(styleBoosts[style]).forEach(([key, value]) => { attrs[key as AttrKey] += value ?? 0; });
+  const correction = target - calculateOvr(position, attrs);
+  (Object.keys(attrs) as AttrKey[]).forEach((key) => { attrs[key] = clamp(attrs[key] + correction, 18, 78); });
+  return attrs;
+}
+
+function MiniGame({ opportunity, onDone }: { opportunity: InteractiveOpportunity; onDone: (quality: number) => void }) {
+  const [phase, setPhase] = useState<"preview" | "play">(opportunity.kind === "choice" || opportunity.kind === "sequence" ? "preview" : "play");
+  const [entered, setEntered] = useState<number[]>([]);
+  const [reactionReady, setReactionReady] = useState(false);
+  const mountedAt = useRef(0);
+  const seed = [...opportunity.id].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const target = seed % 3;
+  const sequence = useMemo(() => Array.from({ length: 4 }, (_, index) => (seed + index * 7) % 4), [seed]);
+  useEffect(() => { mountedAt.current = performance.now(); }, []);
+  useEffect(() => {
+    if (phase !== "preview") return;
+    const timer = window.setTimeout(() => setPhase("play"), 1100);
+    return () => window.clearTimeout(timer);
+  }, [phase]);
+  useEffect(() => {
+    if (opportunity.kind !== "reaction") return;
+    const delay = 650 + (seed % 900);
+    const timer = window.setTimeout(() => { mountedAt.current = performance.now(); setReactionReady(true); }, delay);
+    return () => window.clearTimeout(timer);
+  }, [opportunity.kind, seed]);
+
+  const clickTiming = () => {
+    const cycle = ((performance.now() - mountedAt.current) % 1800) / 1800;
+    const cursor = cycle <= .5 ? cycle * 2 : 2 - cycle * 2;
+    onDone(clamp(100 - Math.abs(cursor - .5) * 190));
+  };
+  const enterSequence = (value: number) => {
+    const next = [...entered, value];
+    setEntered(next);
+    const wrong = next.some((item, index) => item !== sequence[index]);
+    if (wrong) onDone(Math.max(6, 42 - next.length * 7));
+    else if (next.length === sequence.length) onDone(96);
+  };
+  return <div className="v3-minigame">
+    <div className="v3-mini-heading"><span>MINIGRA • {opportunity.actionType.toUpperCase()}</span><strong>{ATTR_LABELS[opportunity.skill]}</strong></div>
+    {opportunity.kind === "timing" && <><div className="v3-timing"><i /><b /></div><button onClick={clickTiming}>TERAZ!</button></>}
+    {opportunity.kind === "choice" && <div className="v3-choice">{["LEWO", "ŚRODEK", "PRAWO"].map((label, index) => <button key={label} className={phase === "preview" && index === target ? "preview" : ""} disabled={phase === "preview"} onClick={() => onDone(index === target ? 94 : 14)}>{phase === "preview" && index === target ? "CEL" : label}</button>)}</div>}
+    {opportunity.kind === "sequence" && <><div className="v3-sequence-preview">{phase === "preview" ? sequence.map((value, index) => <kbd key={index}>{["↑", "→", "↓", "←"][value]}</kbd>) : <span>POWTÓRZ SEKWENCJĘ • {entered.length}/4</span>}</div>{phase === "play" && <div className="v3-choice">{["↑", "→", "↓", "←"].map((label, index) => <button key={label} onClick={() => enterSequence(index)}>{label}</button>)}</div>}</>}
+    {opportunity.kind === "reaction" && <button className={reactionReady ? "reaction-ready" : ""} disabled={!reactionReady} onClick={() => onDone(clamp(108 - (performance.now() - mountedAt.current) / 7))}>{reactionReady ? "REAGUJ!" : "CZEKAJ…"}</button>}
+  </div>;
+}
+
+export default function CareerGame() {
+  const [career, setCareer] = useState<Career | null>(null);
+  const [world, setWorld] = useState<WorldState | null>(null);
+  const [match, setMatch] = useState<MatchSimulationState | null>(null);
+  const [seed, setSeed] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [view, setView] = useState<View>("home");
+  const [paused, setPaused] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [intensity, setIntensity] = useState<Intensity>("normalny");
+  const [creator, setCreator] = useState({ name: "Mirek Wolej", age: 18, nationality: "PL" as CountryCode, position: "Pomocnik" as Position, foot: "Prawa" as "Prawa" | "Lewa", ovr: 50, club: START_CLUBS[0], style: "Dyrygent", talent: TALENTS[5] });
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const save = await SaveRepository.load<Career>();
+      if (!alive) return;
+      if (save?.version === 3) {
+        setSeed(save.seed); setCareer(save.career); setWorld(save.world); setMatch(save.activeMatch);
+      } else {
+        const legacyText = window.localStorage.getItem("pilkarz-na-pelnej-save-v2");
+        if (legacyText) {
+          try {
+            const legacy = JSON.parse(legacyText) as Record<string, unknown> & { player?: Record<string, unknown> };
+            const legacySeed = seedForNewCareer(String(legacy.player?.name ?? "Zawodnik"));
+            const legacyWorld = createWorld(legacySeed);
+            const club = findClubByName(legacyWorld, String(legacy.player?.club ?? START_CLUBS[0]));
+            const migrated: Career = {
+              ...(legacy as unknown as Career), age: 18, nationality: "PL", clubId: club.id, leagueId: `${club.country}-L${club.tier}`,
+              managerTrust: 50, hiddenTalent: "Losowy", hiddenRevealed: Boolean(legacy.hiddenRevealed), trainingCount: Number(legacy.trainingCount ?? 0),
+            };
+            setSeed(legacySeed); setCareer(migrated); setWorld(legacyWorld);
+          } catch { window.localStorage.removeItem("pilkarz-na-pelnej-save-v2"); }
+        }
+      }
+      setLoaded(true);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!loaded || !career || !world) return;
+    const save: SaveGameV3<Career> = { version: 3, seed, savedAt: Date.now(), career, world, activeMatch: match, settings: { engineVersion: "v3", matchSpeed: match?.speed ?? 1, reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches } };
+    const timer = window.setTimeout(() => void SaveRepository.write(save), 180);
+    return () => window.clearTimeout(timer);
+  }, [career, loaded, match, seed, world]);
+
+  useEffect(() => {
+    if (!match || paused || (match.phase !== "running" && match.phase !== "warning")) return;
+    const timer = window.setTimeout(() => setMatch((current) => current ? advanceMatch(current, 1) : current), match.phase === "warning" ? 1250 : 900 / match.speed);
+    return () => window.clearTimeout(timer);
+  }, [match, paused]);
+
+  useEffect(() => {
+    const visibility = () => { if (document.hidden) setPaused(true); };
+    document.addEventListener("visibilitychange", visibility);
+    return () => document.removeEventListener("visibilitychange", visibility);
+  }, []);
+
+  const createCareer = () => {
+    const careerSeed = seedForNewCareer(creator.name);
+    const nextWorld = createWorld(careerSeed);
+    const club = findClubByName(nextWorld, creator.club);
+    const level = START_LEVELS.find((item) => item.value === creator.ovr)!;
+    const nextCareer: Career = {
+      player: { name: creator.name.trim() || "Mirek Wolej", position: creator.position, foot: creator.foot, number: creator.position === "Bramkarz" ? 1 : 8, attrs: initialAttributes(creator.position, creator.ovr, creator.style), potential: level.potential, style: creator.style },
+      age: creator.age, nationality: creator.nationality, clubId: club.id, leagueId: `${club.country}-L${club.tier}`,
+      season: 1, week: 1, energy: 78, morale: 70, managerTrust: 50, money: 800, trainingDone: false,
+      hiddenTalent: creator.talent, hiddenRevealed: creator.talent !== TALENTS[5], trainingCount: 0,
+      totals: { matches: 0, goals: 0, assists: 0, saves: 0, rating: 0 },
+    };
+    setSeed(careerSeed); setWorld(nextWorld); setCareer(nextCareer); setView("home");
+  };
+
+  const reset = async () => { await SaveRepository.clear(); setCareer(null); setWorld(null); setMatch(null); setReady(false); };
+
+  const startMatch = () => {
+    if (!career || !world) return;
+    const playerClub = world.clubs[career.clubId];
+    const fixture = currentFixtureForClub(world, career.clubId);
+    const opponentId = fixture ? (fixture.homeId === career.clubId ? fixture.awayId : fixture.homeId) : world.leagues[career.leagueId].clubIds.find((id) => id !== career.clubId)!;
+    const opponent = world.clubs[opponentId];
+    const matchSeed = seed + career.season * 10000 + career.week * 101;
+    setMatch(createMatch({ playerName: career.player.name, playerNumber: career.player.number, position: career.player.position, attrs: career.player.attrs, playerOvr: calculateOvr(career.player.position, career.player.attrs), energy: career.energy, morale: career.morale, managerTrust: career.managerTrust, teamStrength: playerClub.strength, playerClub, opponent }, matchSeed));
+    setPaused(false); setReady(false);
+  };
+
+  const finishMatch = () => {
+    if (!career || !world || !match) return;
+    const fixture = currentFixtureForClub(world, career.clubId);
+    let scoredWorld = world;
+    if (fixture) {
+      const [homeGoals, awayGoals] = fixture.homeId === career.clubId ? [match.scoreHome, match.scoreAway] : [match.scoreAway, match.scoreHome];
+      scoredWorld = recordFixtureResult(world, fixture.id, homeGoals, awayGoals);
+    }
+    setWorld(advanceWorldWeek(scoredWorld, career.leagueId, fixture?.id));
+    const appeared = match.playerRole !== "out";
+    setCareer({
+      ...career, week: career.week === 30 ? 1 : career.week + 1, season: career.week === 30 ? career.season + 1 : career.season,
+      energy: clamp(career.energy - (appeared ? 16 : 4)), morale: clamp(career.morale + (match.scoreHome > match.scoreAway ? 5 : match.scoreHome < match.scoreAway ? -3 : 1)),
+      managerTrust: clamp(career.managerTrust + (match.rating - 6) * 2.2), trainingDone: false,
+      totals: { matches: career.totals.matches + (appeared ? 1 : 0), goals: career.totals.goals + match.stats.goals, assists: career.totals.assists + match.stats.assists, saves: career.totals.saves + match.stats.saves, rating: career.totals.rating + (appeared ? match.rating : 0) },
+    });
+    setMatch(null); setReady(false); setView("home");
+  };
+
+  const train = (training: (typeof TRAININGS)[number]) => {
+    if (!career || career.trainingDone) return;
+    const multiplier = INTENSITY[intensity].growth * (.82 + career.managerTrust / 320);
+    const attrs = { ...career.player.attrs };
+    Object.entries(training.attrs).forEach(([key, gain]) => { attrs[key as AttrKey] = clamp(attrs[key as AttrKey] + (gain ?? 0) * multiplier, 1, career.player.potential); });
+    const trainingCount = career.trainingCount + 1;
+    setCareer({ ...career, player: { ...career.player, attrs }, trainingDone: true, trainingCount, hiddenRevealed: career.hiddenRevealed || trainingCount >= 3, energy: clamp(career.energy + training.energy * INTENSITY[intensity].cost), managerTrust: clamp(career.managerTrust + (training.id === "recovery" ? .5 : 1.5)) });
+  };
+
+  if (!loaded) return <main className="v3-loading"><div className="brand-mark">P:N:P</div><p>Ładujemy szatnię i 384 kluby…</p></main>;
+
+  if (!career || !world) return <main className="v3-creator">
+    <section className="v3-creator-hero"><div className="brand-mark">P:N:P</div><p>SZYBKA KARIERA • PEŁNY ŚWIAT • PRAWDZIWE DECYZJE</p><h1>TY USTALASZ,<br /><em>KIM BĘDZIESZ.</em></h1><span>384 fikcyjne kluby. Osiem krajów. Jedna kariera i zdecydowanie za dużo opinii prezesa.</span></section>
+    <section className="v3-form"><p className="micro-label">PEŁNA KARTA ZAWODNIKA</p><h2>Podpisz pierwszy kontrakt</h2>
+      <label>IMIĘ I NAZWISKO<input value={creator.name} onChange={(event) => setCreator({ ...creator, name: event.target.value })} /></label>
+      <div className="v3-form-row"><label>WIEK<select value={creator.age} onChange={(event) => setCreator({ ...creator, age: Number(event.target.value) })}>{[16,17,18,19,20,21,22].map((age) => <option key={age}>{age}</option>)}</select></label><label>NARODOWOŚĆ<select value={creator.nationality} onChange={(event) => setCreator({ ...creator, nationality: event.target.value as CountryCode })}>{Object.entries(COUNTRY_NAMES).map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select></label></div>
+      <div className="v3-form-row"><label>POZYCJA<select value={creator.position} onChange={(event) => setCreator({ ...creator, position: event.target.value as Position })}>{["Napastnik","Pomocnik","Obrońca","Bramkarz"].map((item) => <option key={item}>{item}</option>)}</select></label><label>LEPSZA NOGA<select value={creator.foot} onChange={(event) => setCreator({ ...creator, foot: event.target.value as "Prawa" | "Lewa" })}><option>Prawa</option><option>Lewa</option></select></label></div>
+      <label>PIERWSZY KLUB<select value={creator.club} onChange={(event) => setCreator({ ...creator, club: event.target.value })}>{START_CLUBS.map((club) => <option key={club}>{club}</option>)}</select></label>
+      <label>STARTOWY OVR<div className="v3-levels">{START_LEVELS.map((level) => <button key={level.value} className={creator.ovr === level.value ? "active" : ""} onClick={() => setCreator({ ...creator, ovr: level.value })}><strong>{level.value}</strong><span>{level.label}</span></button>)}</div></label>
+      <div className="v3-form-row"><label>STYL GRY<select value={creator.style} onChange={(event) => setCreator({ ...creator, style: event.target.value })}>{STYLES.map((style) => <option key={style}>{style}</option>)}</select></label><label>TALENT TRENINGOWY<select value={creator.talent} onChange={(event) => setCreator({ ...creator, talent: event.target.value })}>{TALENTS.map((talent) => <option key={talent}>{talent}</option>)}</select></label></div>
+      <button className="v3-primary" onClick={createCareer}>PODPISUJĘ I GRAM <FontAwesomeIcon icon={faArrowRight} /></button>
+    </section>
+  </main>;
+
+  if (match) {
+    const opportunity = match.currentOpportunity;
+    const chance = opportunity ? opportunityChanceRange(match, opportunity) : null;
+    return <main className="v3-match">
+      <header className="v3-match-header"><div><div className="brand-mark">P:N:P</div><span>{match.playerClub.name}</span></div><div className="v3-score"><small>{match.minute}′ • {match.phase === "finished" ? "KONIEC" : paused ? "PAUZA" : "NA ŻYWO"}</small><strong>{match.scoreHome}<i>:</i>{match.scoreAway}</strong></div><div><span>{match.opponent.name}</span><button onClick={() => setPaused(!paused)}><FontAwesomeIcon icon={paused ? faPlay : faPause} /></button></div></header>
+      <section className="v3-match-grid">
+        <aside className="v3-match-sidebar"><p className="micro-label">TWÓJ STATUS</p><h2>{roleLabel(match.playerRole)}</h2><div className="v3-rating"><span>OCENA</span><strong>{match.rating.toFixed(1)}</strong></div><dl><div><dt>Gole</dt><dd>{match.stats.goals}</dd></div><div><dt>Asysty</dt><dd>{match.stats.assists}</dd></div><div><dt>Obrony</dt><dd>{match.stats.saves}</dd></div><div><dt>Odbiory</dt><dd>{match.stats.tackles}</dd></div></dl><p>{match.playerRole === "bench" && match.minute < match.playerStartMinute ? `Trener planuje zmianę około ${match.playerStartMinute}. minuty.` : match.playerRole === "out" ? "Dziś oglądasz z trybun. To też jest prawidłowy wynik kariery." : `Na boisku do około ${match.playerEndMinute}. minuty.`}</p></aside>
+        <section className="v3-pitch-stage"><MatchPitch match={match} />
+          {match.phase === "warning" && opportunity && <div className="v3-warning"><span>ZA CHWILĘ • {opportunity.minute}′</span><strong>{opportunity.title}</strong><p>{opportunity.prompt} • {ATTR_LABELS[opportunity.skill]} • szansa po dobrym wykonaniu {chance?.[0]}–{chance?.[1]}%</p></div>}
+          {match.phase === "opportunity" && opportunity && !ready && <div className="v3-action-overlay"><p className="micro-label">AKCJA INTERAKTYWNA • {opportunity.minute}′</p><h1>{opportunity.title}</h1><p>{opportunity.flavor}</p><div className="v3-action-facts"><span><b>{ATTR_LABELS[opportunity.skill]}</b> kluczowy atrybut</span><span><b>{chance?.[0]}–{chance?.[1]}%</b> po świetnej minigrze</span></div><button className="v3-primary" onClick={() => setReady(true)}><FontAwesomeIcon icon={faCirclePlay} /> JESTEM GOTOWY</button></div>}
+          {match.phase === "opportunity" && opportunity && ready && <div className="v3-action-overlay"><h2>{opportunity.prompt}</h2><MiniGame opportunity={opportunity} onDone={(quality) => { setMatch(submitAction(match, opportunity.id, quality)); setReady(false); }} /></div>}
+          {match.phase === "resolved" && match.resolved && <div className={`v3-action-overlay v3-result ${match.resolved.success ? "success" : "fail"}`}><p className="micro-label">JAKOŚĆ MINIGRY {match.resolved.quality}/100</p><h1>{match.resolved.success ? "AKCJA UDANA" : "TYM RAZEM NIE WYSZŁO"}</h1><p>{match.resolved.text}</p><div className="v3-exact"><b>Dokładna szansa: {match.resolved.chance}%</b><span>Rzut: {match.resolved.roll}</span></div><small>{match.resolved.factors.join(" • ")}</small><button className="v3-primary" onClick={() => setMatch(continueAfterAction(match))}>GRAMY DALEJ <FontAwesomeIcon icon={faArrowRight} /></button></div>}
+          {match.phase === "finished" && <div className="v3-action-overlay"><p className="micro-label">KONIEC MECZU</p><h1>{match.scoreHome > match.scoreAway ? "SZATNIA ŚPIEWA. NIE RÓWNO, ALE GŁOŚNO." : match.scoreHome === match.scoreAway ? "REMIS. KSIĘGOWY ZADOWOLONY." : "PREZES JUŻ SZUKA WINNEGO."}</h1><div className="v3-final-score">{match.scoreHome}:{match.scoreAway}</div><p>{match.stats.attempts} interaktywnych akcji • ocena {match.rating.toFixed(1)}</p><button className="v3-primary" onClick={finishMatch}>WRACAM DO KARIERY</button></div>}
+          <div className="v3-speed"><button onClick={() => setPaused(!paused)}><FontAwesomeIcon icon={paused ? faPlay : faPause} /></button>{([1,2,4] as const).map((speed) => <button key={speed} className={match.speed === speed ? "active" : ""} onClick={() => setMatch(setMatchSpeed(match, speed))}>×{speed}</button>)}</div>
+        </section>
+        <aside className="v3-commentary"><p className="micro-label">RADIO BOISKOWE</p><h3>Minuta po minucie</h3>{match.events.slice(0, 9).map((event) => <p key={event.id} className={event.type === "goal" ? "goal" : ""}>{event.text}</p>)}</aside>
+      </section>
+    </main>;
+  }
+
+  const playerClub = world.clubs[career.clubId];
+  const playerOvr = calculateOvr(career.player.position, career.player.attrs);
+  const fixture = currentFixtureForClub(world, career.clubId);
+  const opponent = fixture ? world.clubs[fixture.homeId === career.clubId ? fixture.awayId : fixture.homeId] : null;
+  const league = world.leagues[career.leagueId];
+  const priorities = (Object.keys(career.player.attrs) as AttrKey[]).sort((a, b) => (WEIGHTS[career.player.position][b] ?? 0) - (WEIGHTS[career.player.position][a] ?? 0)).slice(0, 3);
+
+  return <main className="v3-career">
+    <header className="v3-top"><div className="v3-brand"><div className="brand-mark">P:N:P</div><strong>PIŁKARZ: NA PEŁNEJ</strong></div><div className="v3-season">SEZON {career.season} • TYDZIEŃ {career.week}</div><button onClick={() => void reset()}>NOWA KARIERA</button></header>
+    <nav className="v3-nav">{([
+      ["home", faHouse, "KARIERA"], ["player", faUser, "ZAWODNIK"], ["training", faDumbbell, "TRENING"], ["world", faGlobeEurope, "ŚWIAT"],
+    ] as Array<[View, typeof faHouse, string]>).map(([id, icon, label]) => <button key={id} className={view === id ? "active" : ""} onClick={() => setView(id)}><FontAwesomeIcon icon={icon} />{label}</button>)}</nav>
+    <section className="v3-career-grid">
+      <aside className="v3-profile"><div className="v3-shirt">{career.player.number}<small>{playerClub.short}</small></div><p className="micro-label">{career.player.position} • {career.player.foot} noga • {career.player.style}</p><h1>{career.player.name}</h1><span>{career.age} lat • {COUNTRY_NAMES[career.nationality]}</span><p>{playerClub.name}<small>{league.name}</small></p><div className="v3-profile-ovr"><span>OVR</span><strong>{playerOvr.toFixed(1)}</strong><small>Potencjał {career.player.potential}</small></div><div className="v3-bars"><label>ENERGIA <b>{Math.round(career.energy)}%</b><i><em style={{ width: `${career.energy}%` }} /></i></label><label>MORALE <b>{Math.round(career.morale)}%</b><i><em style={{ width: `${career.morale}%` }} /></i></label><label>ZAUFANIE TRENERA <b>{Math.round(career.managerTrust)}%</b><i><em style={{ width: `${career.managerTrust}%` }} /></i></label></div><div className="v3-talent"><FontAwesomeIcon icon={faWandMagicSparkles} /><span>TALENT</span><strong>{career.hiddenRevealed ? career.hiddenTalent : "???"}</strong><small>{career.hiddenRevealed ? "Bonus działa na rozwój." : `${career.trainingCount}/3 treningów do odkrycia`}</small></div></aside>
+      <section className="v3-dashboard">
+        {view === "home" && <><div className="v3-view-title"><p className="micro-label">CENTRUM KARIERY</p><h2>Jedna decyzja naraz. Resztę liczy świat.</h2></div><section className="v3-hero-card"><div><p className="micro-label">NAJWAŻNIEJSZE TERAZ</p><h3>{career.trainingDone ? "Plan wykonany. Czas sprawdzić decyzję trenera." : "Masz trening przed kolejną kolejką."}</h3><p>{opponent ? `Rywal: ${opponent.name}, siła ${opponent.strength.toFixed(1)}. Występ zależy od OVR, formy i zaufania.` : "Terminarz czeka na kolejną kolejkę."}</p><button onClick={() => setView("training")}>{career.trainingDone ? "ZOBACZ TRENING" : "WYBIERAM TRENING"}</button></div><div className="v3-kpis"><article><FontAwesomeIcon icon={faStar} /><span>OVR</span><strong>{playerOvr.toFixed(1)}</strong></article><article><FontAwesomeIcon icon={faGaugeHigh} /><span>FORMA</span><strong>{Math.round((career.energy + career.morale) / 2)}%</strong></article><article><FontAwesomeIcon icon={faClock} /><span>MECZE</span><strong>{career.totals.matches}</strong></article><article><FontAwesomeIcon icon={faCoins} /><span>KONTO</span><strong>{career.money} zł</strong></article></div></section><section className="v3-engine-note"><FontAwesomeIcon icon={faChartLine} /><div><strong>NOWY SILNIK MECZU</strong><p>90 minut, niezależne gole zespołów, 0–7 okazji gracza, ławka i brak występu. Każda minigra zwraca jakość 0–100.</p></div></section></>}
+        {view === "player" && <><div className="v3-view-title"><p className="micro-label">KARTA ZAWODNIKA</p><h2>Co naprawdę buduje OVR {playerOvr.toFixed(1)}?</h2></div><div className="v3-attributes">{(Object.keys(career.player.attrs) as AttrKey[]).map((key) => { const priority = priorities.indexOf(key); return <article key={key} className={priority >= 0 ? `priority p${priority + 1}` : ""}><FontAwesomeIcon icon={ATTR_ICONS[key]} /><div><span>{ATTR_LABELS[key]} {priority >= 0 && <small>P{priority + 1}</small>}</span><strong>{career.player.attrs[key].toFixed(1)}</strong></div><i><b style={{ width: `${career.player.attrs[key]}%` }} /></i><em>{Math.round((WEIGHTS[career.player.position][key] ?? 0) * 100)}% OVR pozycji</em></article>; })}</div></>}
+        {view === "training" && <><div className="v3-view-title v3-training-title"><div><p className="micro-label">PLAN TYGODNIA</p><h2>Wybierz typ i intensywność.</h2></div><div>{(Object.keys(INTENSITY) as Intensity[]).map((key) => <button key={key} className={intensity === key ? "active" : ""} disabled={career.trainingDone} onClick={() => setIntensity(key)}>{INTENSITY[key].label}</button>)}</div></div><div className="v3-trainings">{TRAININGS.map((training) => { const impact = Object.entries(training.attrs).reduce((sum, [key, gain]) => sum + (gain ?? 0) * (WEIGHTS[career.player.position][key as AttrKey] ?? 0), 0) * INTENSITY[intensity].growth; const rank = [...TRAININGS].sort((a,b) => Object.entries(b.attrs).reduce((sum,[key,gain]) => sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)-Object.entries(a.attrs).reduce((sum,[key,gain])=>sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)).indexOf(training)+1; return <button key={training.id} disabled={career.trainingDone} onClick={() => train(training)}><FontAwesomeIcon icon={training.icon} /><div><small>{training.category}</small><strong>{training.title}</strong><p>{training.copy}</p></div><span>+{impact.toFixed(2)} OVR {rank <= 3 && <em>TOP {rank}</em>}</span><footer>{Object.entries(training.attrs).map(([key,gain]) => <b key={key}>+{((gain??0)*INTENSITY[intensity].growth).toFixed(2)} {ATTR_LABELS[key as AttrKey]}</b>)}<i className={training.energy > 0 ? "positive" : "negative"}>{training.energy > 0 ? "+" : ""}{Math.round(training.energy*INTENSITY[intensity].cost)} energii</i></footer></button>; })}</div>{career.trainingDone && <div className="v3-done">PLAN ZREALIZOWANY • kolejny trening po meczu</div>}</>}
+        {view === "world" && <><div className="v3-view-title"><p className="micro-label">{COUNTRY_NAMES[playerClub.country]} • {league.name}</p><h2>Świat: 8 krajów, 24 ligi, 384 kluby.</h2></div><div className="v3-world-summary">{world.countries.map((country) => <span key={country.code}><b>{country.code}</b>{country.name}<small>48 klubów</small></span>)}</div><div className="v3-table"><header><span>#</span><span>KLUB</span><span>M</span><span>BR</span><span>PKT</span></header>{sortedTable(league).map((row,index) => <div key={row.clubId} className={row.clubId === career.clubId ? "current" : ""}><span>{index+1}</span><span><i style={{ background: world.clubs[row.clubId].primary }}>{world.clubs[row.clubId].short}</i>{world.clubs[row.clubId].name}</span><span>{row.played}</span><span>{row.goalsFor}:{row.goalsAgainst}</span><strong>{row.points}</strong></div>)}</div></>}
+      </section>
+      <aside className="v3-next"><p className="micro-label"><FontAwesomeIcon icon={faCalendarDays} /> KOLEJKA {world.round}/30</p>{opponent ? <><div className="v3-versus"><i style={{ background: playerClub.primary }}>{playerClub.short}</i><span>VS</span><i style={{ background: opponent.primary }}>{opponent.short}</i></div><h2>{opponent.name}</h2><p>Siła rywala <strong>{opponent.strength.toFixed(1)}</strong><br />Forma i zaufanie decydują o składzie.</p><button className="v3-primary" onClick={startMatch}>{career.trainingDone ? "JADĘ NA MECZ" : "GRAM BEZ TRENINGU"} <FontAwesomeIcon icon={faArrowRight} /></button></> : <p>Brak meczu w tej kolejce.</p>}</aside>
+    </section>
+  </main>;
+}
