@@ -786,7 +786,6 @@ export default function Home() {
           <p className="micro-label">NASTĘPNY MECZ • {career.matchIndex + 1}/{OPPONENTS.length}</p><div className="versus"><div className="mini-crest">{career.player.club.slice(0, 2).toUpperCase()}</div><span>VS</span><div className="mini-crest opponent" style={{ background: nextOpponent.color }}>{nextOpponent.short.slice(0, 2)}</div></div><h2>{nextOpponent.name}</h2><p>Siła rywala <strong>{nextOpponent.strength}</strong><br />Twoja forma zależy od energii i minigier.</p>
           <div className="impact-note"><strong>TU NIE MA „+5% SZANS”.</strong><p>Udany strzał daje gola. Udana obrona kasuje gola. Dobra asysta zmienia wynik na tablicy.</p></div>
           <button className="match-button" onClick={startMatch} disabled={showDecision}>{showDecision ? "NAJPIERW DECYZJA" : career.trainingDone ? "WYCHODZĘ NA BOISKO" : "GRAM BEZ TRENINGU"}<span>→</span></button>
-          <div className="season-track">{OPPONENTS.map((opponent, index) => <div key={opponent.short} className={index < career.matchIndex ? "played" : index === career.matchIndex ? "current" : ""}><span>{index + 1}</span><small>{opponent.short}</small></div>)}</div>
         </aside>
       </section>
     </main>
