@@ -1015,3 +1015,57 @@ body { background:#071019; }
 .v3-sound-toggle { margin:0 0 10px auto; display:block; border:1px solid #344956; border-radius:7px; background:#10202c; color:#8298a8; padding:8px 11px; font-size:7px; font-weight:900; letter-spacing:.08em; }.v3-sound-toggle.active { border-color:rgba(184,255,46,.42); color:#b8ff2e; background:rgba(184,255,46,.055); }
 .v3-cloud-sync { margin-bottom:10px; padding:9px 11px; display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; border:1px solid #304451; border-radius:9px; background:#0e1d29; }.v3-cloud-sync div { display:grid; gap:3px; }.v3-cloud-sync strong { color:#b8ff2e; font-size:8px; letter-spacing:.09em; }.v3-cloud-sync span,.v3-cloud-sync em { color:#8499a7; font-size:7px; font-style:normal; }.v3-cloud-sync button { border:1px solid #3a4e5b; border-radius:6px; background:#142632; color:#eef4f7; padding:8px 10px; font-size:7px; font-weight:900; }.v3-cloud-sync em { grid-column:1/-1; color:#ffc144; }
 @media (max-width:620px) { .v3-cloud-sync { grid-template-columns:1fr 1fr; }.v3-cloud-sync div { grid-column:1/-1; } }
+
+/* V3 legibility pass — interface copy must remain readable on desktop displays. */
+.v3-career .micro-label,.v3-match .micro-label { font-size:11px; line-height:1.35; }
+.v3-top>button,.v3-nav button { font-size:11px; }
+.v3-shirt small,.v3-profile>p small,.v3-profile-ovr span,.v3-profile-ovr small { font-size:10px; }
+.v3-profile>span,.v3-profile>p:not(.micro-label) { font-size:12px; }
+.v3-bars label { font-size:10px; }
+.v3-talent span,.v3-talent small { font-size:10px; line-height:1.4; }
+.v3-talent strong { font-size:14px; }
+.v3-next>p:not(.micro-label),.v3-impact-note p { font-size:12px; }
+.v3-primary,.v3-hero-card button { font-size:11px; }
+
+.v3-training-title button { font-size:11px; }
+.v3-training-impact>span,.v3-training-impact small { font-size:10px; line-height:1.35; }
+.v3-training-impact>b { font-size:11px; }
+.v3-cycle-slots small,.v3-cycle-slots button { font-size:10px; }
+.v3-cycle-slots b { font-size:11px; }
+.v3-trainings>button>div small { font-size:10px; }
+.v3-trainings>button>div strong { font-size:14px; }
+.v3-trainings>button p { font-size:11px; line-height:1.45; }
+.v3-trainings>button>span { font-size:11px; }
+.v3-trainings>button>span em { font-size:10px; }
+.v3-trainings footer b,.v3-trainings footer i { font-size:10px; line-height:1.25; }
+.v3-done,.v3-traits span,.v3-traits b { font-size:10px; }
+
+.v3-attributes article>em,.v3-world-summary small,.v3-table i { font-size:10px; }
+.v3-table>header,.v3-table>div { min-height:40px; font-size:11px; }
+.v3-availability,.v3-selection-status small,.v3-coach span,.v3-selection-status p,.v3-coach small,
+.v3-squad-table>header,.v3-squad-table>div,.v3-squad-table strong,.v3-role-preview { font-size:10px; }
+.v3-contract span,.v3-contract article>span,.v3-contract p,.v3-relations small,.v3-offers span,.v3-offers p,
+.v3-offers button,.v3-ledger p,.v3-negotiation-strip span,.v3-negotiation-strip button { font-size:10px; }
+.v3-relations b,.v3-market-heading { font-size:11px; }
+.v3-life-decision span,.v3-life-decision p,.v3-life-decision button strong,.v3-life-decision button small,
+.v3-objectives small,.v3-objectives b { font-size:10px; }
+.v3-competition-kpis span,.v3-competition-kpis p,.v3-cup-grid div span,.v3-cup-grid em,
+.v3-europe-groups span,.v3-europe-groups b,.v3-europe-groups small { font-size:10px; }
+.v3-cup-grid div strong { font-size:11px; }
+.v3-tutorial span,.v3-tutorial button,.v3-settings label,.v3-achievements p,.v3-achievements span,
+.v3-archive div span,.v3-archive p,.v3-event-log p,.v3-sound-toggle,.v3-cloud-sync span,.v3-cloud-sync em,
+.v3-cloud-sync button { font-size:10px; }
+.v3-tutorial strong,.v3-achievements strong,.v3-archive div strong,.v3-cloud-sync strong { font-size:11px; }
+
+.v3-score small,.v3-rating span,.v3-match-sidebar dt { font-size:10px; }
+.v3-action-overlay h1 { line-height:1.15; }
+.v3-match-sidebar>p:not(.micro-label),.v3-warning p,.v3-action-facts span,.v3-commentary>p:not(.micro-label) { font-size:11px; }
+.v3-warning>span,.v3-mini-heading,.v3-timing-game>header,.v3-meter-copy>span { font-size:10px; }
+.v3-stage-dots>span,.v3-meter-copy>p,.v3-tap-hint { font-size:10px; }
+.v3-meter-scale,.v3-timing-game>footer small { font-size:9px; }
+.v3-timing-game>footer b { font-size:11px; }
+
+@media (max-width:620px) {
+  .v3-match .micro-label,.v3-career .micro-label,.v3-timing-game>header { font-size:9px; }
+  .v3-stage-dots>span { font-size:0; }
+}
