@@ -15,6 +15,9 @@ type AttrKey =
   | "refleks";
 type Attributes = Record<AttrKey, number>;
 type GameKind = "timing" | "choice" | "sequence" | "reaction";
+type Difficulty = "Niedzielny" | "Normalny" | "Bez litości";
+type PlayStyle = "Technik" | "Sprinter" | "Dyrygent" | "Egzekutor" | "Walczak" | "Profesor";
+type HiddenTalent = "touch" | "engine" | "vision" | "killer" | "worker" | "none";
 
 type Player = {
   name: string;
@@ -24,6 +27,8 @@ type Player = {
   club: string;
   potential: number;
   attrs: Attributes;
+  style: PlayStyle;
+  hiddenTalent: HiddenTalent;
 };
 
 type Career = {
@@ -37,6 +42,13 @@ type Career = {
   media: number;
   money: number;
   trainingDone: boolean;
+  trainingCount: number;
+  hiddenRevealed: boolean;
+  difficulty: Difficulty;
+  facilities: number;
+  teamStrength: number;
+  salary: number;
+  clubPath: string;
   decisions: number[];
   totals: { matches: number; goals: number; assists: number; saves: number; rating: number };
 };
@@ -105,6 +117,54 @@ const OPPONENTS = [
   { name: "Turbo Pogoń II", short: "TPI", strength: 62, color: "#ff8db5" },
 ];
 
+const START_LEVELS = [
+  { id: "podworko", label: "Podwórko", ovr: 34, potential: 83, copy: "Talent widoczny głównie dla mamy" },
+  { id: "bklasa", label: "B-klasowy kozak", ovr: 42, potential: 85, copy: "Znają cię w trzech gminach" },
+  { id: "akademia", label: "Akademia", ovr: 50, potential: 87, copy: "Umiesz przyjąć kierunkowo" },
+  { id: "kadra", label: "Kadra województwa", ovr: 58, potential: 89, copy: "Skauci naprawdę notują" },
+  { id: "wonderkid", label: "Wonderkid", ovr: 65, potential: 92, copy: "YouTube już robi kompilacje" },
+];
+
+const CLUBS = [
+  { name: "LKS Drobny Druk", path: "B-klasa • lokalna legenda", strength: 39, facilities: 0.9, salary: 800, minutes: 96 },
+  { name: "Grom Paragonowo", path: "Klasa okręgowa • ambitny projekt", strength: 45, facilities: 1, salary: 1250, minutes: 82 },
+  { name: "Unia Kiełbasa", path: "IV liga • presja sponsora", strength: 51, facilities: 1.08, salary: 2100, minutes: 65 },
+  { name: "Betonowianka Betonów", path: "III liga • piłka zawodowa-ish", strength: 57, facilities: 1.16, salary: 3800, minutes: 48 },
+  { name: "Polonia Rotterdam U21", path: "Akademia zagraniczna • tęsknota gratis", strength: 61, facilities: 1.24, salary: 4600, minutes: 34 },
+  { name: "FC Wolny Kontrakt", path: "Bez klubu • pełna swoboda, zero wypłaty", strength: 36, facilities: 0.82, salary: 0, minutes: 100 },
+];
+
+const PLAY_STYLES: Record<PlayStyle, { copy: string; boosts: Partial<Record<AttrKey, number>> }> = {
+  Technik: { copy: "Klej w bucie, mniej pary w barku", boosts: { technika: 5, drybling: 4, sila: -2 } },
+  Sprinter: { copy: "Najpierw biegniesz, potem pytasz dokąd", boosts: { szybkosc: 6, kondycja: 2, technika: -2 } },
+  Dyrygent: { copy: "Widzisz podanie dwie reklamy wcześniej", boosts: { podania: 6, technika: 2, strzal: -2 } },
+  Egzekutor: { copy: "Jedna piłka, jedna bramka, zero pytań", boosts: { strzal: 6, sila: 2, podania: -2 } },
+  Walczak: { copy: "Koszulka czysta tylko przed rozgrzewką", boosts: { odbior: 5, sila: 4, drybling: -2 } },
+  Profesor: { copy: "Spokojnie, wszystko było policzone", boosts: { refleks: 4, podania: 3, odbior: 3, szybkosc: -2 } },
+};
+
+const PERSONALITIES = {
+  profesjonalista: { label: "Profesjonalista", copy: "Owsianka, sen, żadnych lajwów", professionalism: 62, morale: 66, media: 5 },
+  gwiazdor: { label: "Gwiazdor", copy: "Najpierw cieszynka, potem gol", professionalism: 38, morale: 80, media: 27 },
+  swojak: { label: "Swojak", copy: "Dobry dla szatni i pani z bufetu", professionalism: 49, morale: 76, media: 12 },
+  introwertyk: { label: "Cichy fachowiec", copy: "Wywiad? Wolę trening", professionalism: 56, morale: 68, media: 3 },
+};
+
+const HIDDEN_TALENTS: Record<HiddenTalent, { label: string; copy: string; keys: AttrKey[]; multiplier: number }> = {
+  touch: { label: "Złoty dotyk", copy: "+28% treningu techniki i dryblingu", keys: ["technika", "drybling"], multiplier: 1.28 },
+  engine: { label: "Silnik z diesla", copy: "+25% treningu motorycznego", keys: ["szybkosc", "sila", "kondycja"], multiplier: 1.25 },
+  vision: { label: "Skaner boiska", copy: "+27% podań, odbioru i refleksu", keys: ["podania", "odbior", "refleks"], multiplier: 1.27 },
+  killer: { label: "Instynkt killera", copy: "+30% strzału i techniki", keys: ["strzal", "technika"], multiplier: 1.3 },
+  worker: { label: "Pracoholik", copy: "+12% każdego treningu", keys: ["technika", "strzal", "podania", "drybling", "odbior", "szybkosc", "sila", "kondycja", "refleks"], multiplier: 1.12 },
+  none: { label: "Bez tajnej broni", copy: "Czyste umiejętności, żadnych bonusów", keys: [], multiplier: 1 },
+};
+
+const DIFFICULTIES: Record<Difficulty, { copy: string; window: number; growth: number }> = {
+  Niedzielny: { copy: "Większe strefy, szybszy rozwój", window: 1.25, growth: 1.12 },
+  Normalny: { copy: "Uczciwa piłka i uczciwy stres", window: 1, growth: 1 },
+  "Bez litości": { copy: "Wąskie okna, wolniejszy progres", window: 0.78, growth: 0.9 },
+};
+
 const TRAININGS: Array<{
   id: string;
   eyebrow: string;
@@ -131,7 +191,7 @@ function ovr(player: Player) {
   return Math.round(value * 10) / 10;
 }
 
-function initialAttributes(position: Position): Attributes {
+function initialAttributes(position: Position, targetOvr = 47, style: PlayStyle = "Technik"): Attributes {
   const common: Attributes = { technika: 43, strzal: 39, podania: 41, drybling: 42, odbior: 38, szybkosc: 46, sila: 40, kondycja: 45, refleks: 40 };
   const boosts: Record<Position, Partial<Attributes>> = {
     Napastnik: { strzal: 52, drybling: 47, szybkosc: 50, odbior: 29 },
@@ -139,7 +199,25 @@ function initialAttributes(position: Position): Attributes {
     Obrońca: { odbior: 53, sila: 51, kondycja: 49, strzal: 31 },
     Bramkarz: { refleks: 55, technika: 45, podania: 46, odbior: 34, strzal: 24 },
   };
-  return { ...common, ...boosts[position] };
+  const attrs = { ...common, ...boosts[position] };
+  Object.entries(PLAY_STYLES[style].boosts).forEach(([key, value]) => {
+    const attr = key as AttrKey;
+    attrs[attr] += value ?? 0;
+  });
+  const temporaryPlayer: Player = { name: "", position, foot: "Prawa", number: 8, club: "", potential: 99, attrs, style, hiddenTalent: "none" };
+  const correction = targetOvr - ovr(temporaryPlayer);
+  (Object.keys(attrs) as AttrKey[]).forEach((key) => { attrs[key] = clamp(attrs[key] + correction, 18, 78); });
+  return attrs;
+}
+
+function nameHash(value: string) {
+  return [...value].reduce((sum, character, index) => sum + character.charCodeAt(0) * (index + 3), 17);
+}
+
+function resolveHiddenTalent(mode: string, playerName: string): HiddenTalent {
+  if (mode !== "mystery") return mode as HiddenTalent;
+  const pool: HiddenTalent[] = ["touch", "engine", "vision", "killer", "worker"];
+  return pool[nameHash(playerName) % pool.length];
 }
 
 function outcome(text: string, values: Omit<Outcome, "text"> = {}): Outcome {
@@ -186,7 +264,7 @@ function buildActions(position: Position): MatchAction[] {
   return attack;
 }
 
-function MiniGame({ action, player, onResolve }: { action: MatchAction; player: Player; onResolve: (success: boolean) => void }) {
+function MiniGame({ action, player, difficulty, onResolve }: { action: MatchAction; player: Player; difficulty: Difficulty; onResolve: (success: boolean) => void }) {
   const skill = player.attrs[action.skill];
   const [cursor, setCursor] = useState(4);
   const [preview, setPreview] = useState(true);
@@ -201,7 +279,8 @@ function MiniGame({ action, player, onResolve }: { action: MatchAction; player: 
     return [0, 1, 2].map((index) => options[(action.id * 3 + index * 2) % options.length]);
   }, [action.id]);
   const targetCenter = 28 + ((action.id * 17) % 45);
-  const targetWidth = clamp(12 + skill / 6, 16, 29);
+  const difficultyWindow = DIFFICULTIES[difficulty].window;
+  const targetWidth = clamp((12 + skill / 6) * difficultyWindow, 13, 34);
 
   const resolveOnce = (success: boolean) => {
     if (done.current) return;
@@ -341,7 +420,7 @@ function MiniGame({ action, player, onResolve }: { action: MatchAction; player: 
       {action.kind === "reaction" && (
         <div className="reaction-game">
           {reaction === "wait" && <div className="reaction-wait">CZEKAJ NA ODSKOK PIŁKI…</div>}
-          {reaction === "go" && <button className="reaction-target" onClick={() => { setReaction("done"); resolveOnce(performance.now() - startedAt.current < clamp(590 + skill * 3, 680, 850)); }}>PIŁKA!<small>KLIKNIJ</small></button>}
+          {reaction === "go" && <button className="reaction-target" onClick={() => { setReaction("done"); resolveOnce(performance.now() - startedAt.current < clamp((590 + skill * 3) * difficultyWindow, 540, 1050)); }}>PIŁKA!<small>KLIKNIJ</small></button>}
         </div>
       )}
     </div>
@@ -356,17 +435,22 @@ export default function Home() {
   const [position, setPosition] = useState<Position>("Pomocnik");
   const [foot, setFoot] = useState<"Prawa" | "Lewa">("Prawa");
   const [club, setClub] = useState("LKS Drobny Druk");
+  const [startLevel, setStartLevel] = useState("akademia");
+  const [style, setStyle] = useState<PlayStyle>("Dyrygent");
+  const [personality, setPersonality] = useState<keyof typeof PERSONALITIES>("swojak");
+  const [difficulty, setDifficulty] = useState<Difficulty>("Normalny");
+  const [hiddenMode, setHiddenMode] = useState("mystery");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("pilkarz-na-pelnej-save");
+    const saved = window.localStorage.getItem("pilkarz-na-pelnej-save-v2");
     if (saved) {
-      try { setCareer(JSON.parse(saved) as Career); } catch { window.localStorage.removeItem("pilkarz-na-pelnej-save"); }
+      try { setCareer(JSON.parse(saved) as Career); } catch { window.localStorage.removeItem("pilkarz-na-pelnej-save-v2"); }
     }
     setLoaded(true);
   }, []);
 
   useEffect(() => {
-    if (loaded && career) window.localStorage.setItem("pilkarz-na-pelnej-save", JSON.stringify(career));
+    if (loaded && career) window.localStorage.setItem("pilkarz-na-pelnej-save-v2", JSON.stringify(career));
   }, [career, loaded]);
 
   useEffect(() => {
@@ -382,22 +466,30 @@ export default function Home() {
 
   const createCareer = () => {
     const cleanName = name.trim() || "Mirek Wolej";
+    const level = START_LEVELS.find((item) => item.id === startLevel) ?? START_LEVELS[2];
+    const selectedClub = CLUBS.find((item) => item.name === club) ?? CLUBS[0];
+    const selectedPersonality = PERSONALITIES[personality];
+    const talent = resolveHiddenTalent(hiddenMode, cleanName);
     setCareer({
-      player: { name: cleanName, position, foot, number: position === "Bramkarz" ? 1 : position === "Napastnik" ? 9 : position === "Obrońca" ? 4 : 8, club, potential: 86, attrs: initialAttributes(position) },
-      season: 1, week: 1, matchIndex: 0, energy: 91, morale: 72, professionalism: 47, media: 12, money: 1200, trainingDone: false, decisions: [],
+      player: { name: cleanName, position, foot, number: position === "Bramkarz" ? 1 : position === "Napastnik" ? 9 : position === "Obrońca" ? 4 : 8, club, potential: level.potential, attrs: initialAttributes(position, level.ovr, style), style, hiddenTalent: talent },
+      season: 1, week: 1, matchIndex: 0, energy: 91, morale: selectedPersonality.morale, professionalism: selectedPersonality.professionalism, media: selectedPersonality.media, money: 1200, trainingDone: false,
+      trainingCount: 0, hiddenRevealed: hiddenMode !== "mystery", difficulty, facilities: selectedClub.facilities, teamStrength: selectedClub.strength, salary: selectedClub.salary, clubPath: selectedClub.path, decisions: [],
       totals: { matches: 0, goals: 0, assists: 0, saves: 0, rating: 0 },
     });
   };
 
   const applyTraining = (training: (typeof TRAININGS)[number]) => {
     if (!career || career.trainingDone) return;
-    const multiplier = (0.75 + career.professionalism / 180) * (career.energy < 35 ? 0.62 : 1);
+    const talent = HIDDEN_TALENTS[career.player.hiddenTalent];
+    const multiplier = (0.75 + career.professionalism / 180) * (career.energy < 35 ? 0.62 : 1) * career.facilities * DIFFICULTIES[career.difficulty].growth;
     const attrs = { ...career.player.attrs };
     Object.entries(training.gains).forEach(([key, gain]) => {
       const attr = key as AttrKey;
-      attrs[attr] = clamp(attrs[attr] + gain * multiplier, 1, career.player.potential);
+      const talentBoost = talent.keys.includes(attr) ? talent.multiplier : 1;
+      attrs[attr] = clamp(attrs[attr] + gain * multiplier * talentBoost, 1, career.player.potential);
     });
-    setCareer({ ...career, player: { ...career.player, attrs }, energy: clamp(career.energy + training.energy), morale: clamp(career.morale + training.morale), trainingDone: true });
+    const nextTrainingCount = career.trainingCount + 1;
+    setCareer({ ...career, player: { ...career.player, attrs }, energy: clamp(career.energy + training.energy), morale: clamp(career.morale + training.morale), trainingDone: true, trainingCount: nextTrainingCount, hiddenRevealed: career.hiddenRevealed || nextTrainingCount >= 3 });
   };
 
   const startMatch = () => {
@@ -418,7 +510,7 @@ export default function Home() {
     // pozostaje deterministyczny; ten fragment odpowiada wyłącznie za tło meczu.
     if (match.index === 2 || match.index === 5) {
       const engineRoll = (career.week * 31 + match.index * 19 + Math.round(ovr(career.player))) % 100;
-      const strengthGap = ovr(career.player) - match.opponent.strength;
+      const strengthGap = ovr(career.player) * 0.45 + career.teamStrength * 0.55 - match.opponent.strength;
       if (engineRoll < clamp(25 - strengthGap * 0.6, 9, 38)) {
         them += 1;
         log.unshift(`${action.minute + 3}′ Rywale rozegrali akcję bez twojego udziału. Gol dla ${match.opponent.name}.`);
@@ -471,7 +563,7 @@ export default function Home() {
       morale: clamp(career.morale + moraleDelta),
       professionalism: clamp(career.professionalism + (match.stats.won >= 5 ? 1 : 0)),
       media: clamp(career.media + match.stats.goals * 2 + (match.rating >= 8 ? 2 : 0)),
-      money: career.money + 850 + (match.us > match.them ? 350 : 0),
+      money: career.money + Math.round(career.salary / 4) + 650 + (match.us > match.them ? 350 : 0),
       trainingDone: false,
       totals: {
         matches: career.totals.matches + 1,
@@ -495,7 +587,7 @@ export default function Home() {
   };
 
   const reset = () => {
-    window.localStorage.removeItem("pilkarz-na-pelnej-save");
+    window.localStorage.removeItem("pilkarz-na-pelnej-save-v2");
     setCareer(null);
     setMatch(null);
   };
@@ -503,26 +595,53 @@ export default function Home() {
   if (!loaded) return <main className="loading-screen">ŁADOWANIE KORKÓW…</main>;
 
   if (!career) {
+    const selectedLevel = START_LEVELS.find((item) => item.id === startLevel) ?? START_LEVELS[2];
+    const selectedClub = CLUBS.find((item) => item.name === club) ?? CLUBS[0];
+    const selectedPersonality = PERSONALITIES[personality];
+    const previewPlayer: Player = { name, position, foot, number: 8, club, potential: selectedLevel.potential, attrs: initialAttributes(position, selectedLevel.ovr, style), style, hiddenTalent: "none" };
     return (
       <main className="start-screen">
         <header className="brand-bar"><div className="brand-mark">P:N:P</div><div>PIŁKARZ: NA PEŁNEJ</div><span>wersja boiskowa 0.1</span></header>
         <section className="hero">
           <div className="hero-copy">
-            <p className="kicker">SZYBKA KARIERA • PRAWDZIWE DECYZJE • ZERO ŚCIEMY</p>
-            <h1>ZAWODOWIEC?<br /><em>JESZCZE NIE.</em></h1>
-            <p className="lead">Od zapachu szatni w okręgówce do hymnu Ligi Mistrzów. O ile najpierw trafisz w zielony pasek.</p>
-            <div className="promise-row"><span>✓ każdy gol jest wygrany</span><span>✓ każdy odbiór ma znaczenie</span><span>✓ OVR liczony jawnie</span></div>
+            <p className="kicker">SZYBKA KARIERA • PEŁNA KONFIGURACJA • ZERO ŚCIEMY</p>
+            <h1>TY USTALASZ,<br /><em>KIM BĘDZIESZ.</em></h1>
+            <p className="lead">Zbuduj zawodnika od podeszwy korka po ego. Każdy wybór zmienia liczby, trening i to, co wydarzy się na boisku.</p>
+            <div className="promise-row"><span>✓ OVR od 34 do 65</span><span>✓ 6 stylów gry</span><span>✓ ukryty talent</span></div>
+            <div className="wide-screen-note"><b>TWÓJ PROFIL</b><span>{position}</span><span>{style}</span><span>{selectedLevel.label}</span><span>{difficulty}</span></div>
           </div>
-          <div className="creator-card">
-            <div className="tape">KARTA ZGŁOSZENIOWA</div>
-            <label>Imię i nazwisko<input value={name} onChange={(event) => setName(event.target.value)} maxLength={28} /></label>
-            <div className="two-cols">
-              <label>Pozycja<select value={position} onChange={(event) => setPosition(event.target.value as Position)}><option>Napastnik</option><option>Pomocnik</option><option>Obrońca</option><option>Bramkarz</option></select></label>
-              <label>Lepsza noga<select value={foot} onChange={(event) => setFoot(event.target.value as "Prawa" | "Lewa")}><option>Prawa</option><option>Lewa</option></select></label>
+          <div className="creator-card creator-card-full">
+            <div className="tape">PEŁNA KARTA ZAWODNIKA</div>
+            <div className="creator-layout">
+              <div className="creator-main">
+                <div className="config-heading"><span>01</span><div><b>TOŻSAMOŚĆ</b><small>Podstawy, których agent już nie zmieni</small></div></div>
+                <label>Imię i nazwisko<input value={name} onChange={(event) => setName(event.target.value)} maxLength={28} /></label>
+                <div className="two-cols">
+                  <label>Pozycja<select value={position} onChange={(event) => setPosition(event.target.value as Position)}><option>Napastnik</option><option>Pomocnik</option><option>Obrońca</option><option>Bramkarz</option></select></label>
+                  <label>Lepsza noga<select value={foot} onChange={(event) => setFoot(event.target.value as "Prawa" | "Lewa")}><option>Prawa</option><option>Lewa</option></select></label>
+                </div>
+
+                <div className="config-heading compact"><span>02</span><div><b>PUNKT STARTOWY</b><small>Dokładny bazowy OVR i potencjał</small></div></div>
+                <div className="level-options">{START_LEVELS.map((level) => <button key={level.id} className={startLevel === level.id ? "selected" : ""} onClick={() => setStartLevel(level.id)}><strong>{level.ovr}</strong><span>{level.label}</span><small>{level.copy}</small></button>)}</div>
+
+                <div className="config-heading compact"><span>03</span><div><b>STYL GRY</b><small>Zmienia rozkład atrybutów przy tym samym OVR</small></div></div>
+                <div className="style-options">{(Object.entries(PLAY_STYLES) as [PlayStyle, (typeof PLAY_STYLES)[PlayStyle]][]).map(([key, value]) => <button key={key} className={style === key ? "selected" : ""} onClick={() => setStyle(key)}><strong>{key}</strong><small>{value.copy}</small></button>)}</div>
+              </div>
+
+              <div className="creator-side">
+                <div className="config-heading"><span>04</span><div><b>OTOCZENIE</b><small>Klub, głowa i zasady świata</small></div></div>
+                <label>Pierwszy klub<select value={club} onChange={(event) => setClub(event.target.value)}>{CLUBS.map((item) => <option key={item.name}>{item.name}</option>)}</select><small className="field-note">{selectedClub.path} • baza treningowa ×{selectedClub.facilities.toFixed(2)} • {selectedClub.salary} zł/mies.</small></label>
+                <label>Charakter<select value={personality} onChange={(event) => setPersonality(event.target.value as keyof typeof PERSONALITIES)}>{Object.entries(PERSONALITIES).map(([key, item]) => <option key={key} value={key}>{item.label}</option>)}</select><small className="field-note">{selectedPersonality.copy} • profesjonalizm {selectedPersonality.professionalism}</small></label>
+                <label>Poziom trudności<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as Difficulty)}><option>Niedzielny</option><option>Normalny</option><option>Bez litości</option></select><small className="field-note">{DIFFICULTIES[difficulty].copy}</small></label>
+                <label>Talent treningowy<select value={hiddenMode} onChange={(event) => setHiddenMode(event.target.value)}><option value="mystery">Ukryty losowy — odkryję w grze</option><option value="touch">Złoty dotyk — jawny</option><option value="engine">Silnik z diesla — jawny</option><option value="vision">Skaner boiska — jawny</option><option value="killer">Instynkt killera — jawny</option><option value="worker">Pracoholik — jawny</option><option value="none">Bez bonusu — tryb purysty</option></select><small className="field-note">{hiddenMode === "mystery" ? "Bonus działa od początku, ale ujawni się po 3 treningach." : HIDDEN_TALENTS[hiddenMode as HiddenTalent].copy}</small></label>
+
+                <div className="setup-summary">
+                  <div className="summary-ovr"><span>STARTOWY OVR</span><strong>{ovr(previewPlayer).toFixed(1)}</strong><small>Potencjał {selectedLevel.potential}</small></div>
+                  <div className="summary-facts"><span><b>{style}</b> styl</span><span><b>{selectedClub.minutes}%</b> szansy na minuty</span><span><b>{hiddenMode === "mystery" ? "???" : HIDDEN_TALENTS[hiddenMode as HiddenTalent].label}</b> talent</span></div>
+                </div>
+                <button className="start-button" onClick={createCareer}>PODPISUJĘ I GRAM <span>→</span></button>
+              </div>
             </div>
-            <label>Pierwszy klub<select value={club} onChange={(event) => setClub(event.target.value)}><option>LKS Drobny Druk</option><option>Grom Paragonowo</option><option>Unia Kiełbasa</option></select></label>
-            <div className="starter-ovr"><span>STARTOWY OVR</span><strong>{ovr({ name, position, foot, number: 8, club, potential: 86, attrs: initialAttributes(position) })}</strong><small>Potencjał 86 • reszta zależy od ciebie</small></div>
-            <button className="start-button" onClick={createCareer}>ZACZYNAM OD PONIEDZIAŁKU <span>→</span></button>
           </div>
         </section>
         <footer className="ticker"><span>OSTATNIA CHWILA</span><p>Prezes zapewnia, że premia jest „już prawie zaksięgowana” • Murawa posiada 72% trawy • Skaut przyjechał, ale pomylił stadiony</p></footer>
@@ -556,7 +675,7 @@ export default function Home() {
                 <p className="micro-label">KLUCZOWA AKCJA {match.index + 1}/{match.actions.length}</p>
                 <h1>{action.title}</h1><p className="action-flavor">{action.flavor}</p>
                 <div className="stake">STAWKA: {action.stake}</div>
-                <MiniGame key={action.id} action={action} player={career.player} onResolve={resolveAction} />
+                <MiniGame key={action.id} action={action} player={career.player} difficulty={career.difficulty} onResolve={resolveAction} />
               </>
             )}
             {match.resolved && !match.finished && (
@@ -594,7 +713,7 @@ export default function Home() {
       <section className="career-grid">
         <aside className="profile-panel">
           <div className="profile-shirt"><span>{career.player.number}</span><small>{career.player.club.slice(0, 3).toUpperCase()}</small></div>
-          <p className="micro-label">{career.player.position.toUpperCase()} • {career.player.foot.toUpperCase()} NOGA</p><h1>{career.player.name}</h1><p className="club-name">{career.player.club}</p>
+          <p className="micro-label">{career.player.position.toUpperCase()} • {career.player.foot.toUpperCase()} NOGA • {career.player.style.toUpperCase()}</p><h1>{career.player.name}</h1><p className="club-name">{career.player.club}<small>{career.clubPath}</small></p>
           <div className="ovr-block"><div><span>OVR</span><strong>{currentOvr.toFixed(1)}</strong></div><p>Potencjał <b>{career.player.potential}</b><br />OVR wynika wyłącznie z atrybutów.</p></div>
           <div className="vitals">
             <div><span>ENERGIA</span><strong>{Math.round(career.energy)}%</strong><i><b style={{ width: `${career.energy}%` }} /></i></div>
@@ -602,6 +721,7 @@ export default function Home() {
             <div><span>PROFESJONALIZM</span><strong>{Math.round(career.professionalism)}%</strong><i><b style={{ width: `${career.professionalism}%` }} /></i></div>
           </div>
           <div className="wallet"><span>STAN KONTA</span><strong>{career.money.toLocaleString("pl-PL")} zł</strong><small>Premia wpłynie. Kiedyś.</small></div>
+          <div className={`talent-card ${career.hiddenRevealed ? "revealed" : "hidden"}`}><span>TALENT TRENINGOWY</span><strong>{career.hiddenRevealed ? HIDDEN_TALENTS[career.player.hiddenTalent].label : "???"}</strong><small>{career.hiddenRevealed ? HIDDEN_TALENTS[career.player.hiddenTalent].copy : `${career.trainingCount}/3 treningów do odkrycia`}</small></div>
         </aside>
 
         <section className="dashboard">
