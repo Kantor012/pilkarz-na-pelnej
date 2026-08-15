@@ -1,4 +1,6 @@
-# vinext-starter
+# Piłkarz: Na Pełnej
+
+Grywalna wersja: [kantor012.github.io/pilkarz-na-pelnej](https://kantor012.github.io/pilkarz-na-pelnej/)
 
 A clean full-stack starter running on
 [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
