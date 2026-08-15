@@ -266,6 +266,7 @@ function buildActions(position: Position): MatchAction[] {
 
 function MiniGame({ action, player, difficulty, onResolve }: { action: MatchAction; player: Player; difficulty: Difficulty; onResolve: (success: boolean) => void }) {
   const skill = player.attrs[action.skill];
+  const [ready, setReady] = useState(false);
   const [cursor, setCursor] = useState(4);
   const [preview, setPreview] = useState(true);
   const [inputs, setInputs] = useState<string[]>([]);
@@ -289,7 +290,7 @@ function MiniGame({ action, player, difficulty, onResolve }: { action: MatchActi
   };
 
   useEffect(() => {
-    if (action.kind !== "timing") return;
+    if (!ready || action.kind !== "timing") return;
     let frame = 0;
     let direction = 1;
     let value = 4;
@@ -305,30 +306,30 @@ function MiniGame({ action, player, difficulty, onResolve }: { action: MatchActi
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [action.kind]);
+  }, [action.kind, ready]);
 
   useEffect(() => {
-    if (action.kind !== "sequence") return;
+    if (!ready || action.kind !== "sequence") return;
     const timer = window.setTimeout(() => setPreview(false), 1350);
     return () => window.clearTimeout(timer);
-  }, [action.kind]);
+  }, [action.kind, ready]);
 
   useEffect(() => {
-    if (action.kind !== "choice") return;
+    if (!ready || action.kind !== "choice") return;
     const startFlight = window.setTimeout(() => setPreview(false), 700);
     const missedBall = window.setTimeout(() => resolveOnce(false), 2350);
     return () => { window.clearTimeout(startFlight); window.clearTimeout(missedBall); };
-  }, [action.kind]);
+  }, [action.kind, ready]);
 
   useEffect(() => {
-    if (action.kind !== "reaction") return;
+    if (!ready || action.kind !== "reaction") return;
     const appear = window.setTimeout(() => {
       startedAt.current = performance.now();
       setReaction("go");
     }, 850 + action.id * 55);
     const fail = window.setTimeout(() => resolveOnce(false), 850 + action.id * 55 + 1250);
     return () => { window.clearTimeout(appear); window.clearTimeout(fail); };
-  }, [action.id, action.kind]);
+  }, [action.id, action.kind, ready]);
 
   const timingStop = () => resolveOnce(Math.abs(cursor - targetCenter) <= targetWidth / 2);
   const pushArrow = (arrow: string) => {
@@ -351,7 +352,14 @@ function MiniGame({ action, player, difficulty, onResolve }: { action: MatchActi
         <span className="real-impact">BEZPOŚREDNI WPŁYW</span>
       </div>
 
-      {action.kind === "timing" && (
+      {!ready && (
+        <div className="ready-gate">
+          <div><span>AKCJA WSTRZYMANA</span><strong>Najpierw ustaw ręce. Potem ratuj wynik.</strong><small>Minigra i jej czas rozpoczną się dopiero po kliknięciu.</small></div>
+          <button onClick={() => setReady(true)}>JESTEM GOTOWY <b>START →</b></button>
+        </div>
+      )}
+
+      {ready && action.kind === "timing" && (
         <div className="timing-game">
           <div className="timing-bar" aria-label="Pasek wyczucia momentu">
             <div className="danger-zone" />
@@ -362,7 +370,7 @@ function MiniGame({ action, player, difficulty, onResolve }: { action: MatchActi
         </div>
       )}
 
-      {action.kind === "choice" && (
+      {ready && action.kind === "choice" && (
         <div className="choice-game">
           <p className="instruction">
             {player.position === "Bramkarz"
@@ -406,7 +414,7 @@ function MiniGame({ action, player, difficulty, onResolve }: { action: MatchActi
         </div>
       )}
 
-      {action.kind === "sequence" && (
+      {ready && action.kind === "sequence" && (
         <div className="sequence-game">
           <p className="instruction">{preview ? "ZAPAMIĘTAJ SEKWENCJĘ" : `POWTÓRZ • ${inputs.length}/${arrows.length}`}</p>
           {preview ? (
@@ -417,7 +425,7 @@ function MiniGame({ action, player, difficulty, onResolve }: { action: MatchActi
         </div>
       )}
 
-      {action.kind === "reaction" && (
+      {ready && action.kind === "reaction" && (
         <div className="reaction-game">
           {reaction === "wait" && <div className="reaction-wait">CZEKAJ NA ODSKOK PIŁKI…</div>}
           {reaction === "go" && <button className="reaction-target" onClick={() => { setReaction("done"); resolveOnce(performance.now() - startedAt.current < clamp((590 + skill * 3) * difficultyWindow, 540, 1050)); }}>PIŁKA!<small>KLIKNIJ</small></button>}
