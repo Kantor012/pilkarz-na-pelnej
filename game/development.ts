@@ -150,6 +150,23 @@ export function previewMicrocycle(input: { state: DevelopmentState; trainings: T
   return { energyDelta, range: range as [number, number], load: Math.round(load), injuryRisk, moneyCost: support.cost, sessions: forecasts.length };
 }
 
+export function settleWeeklyRecovery(input: { state: DevelopmentState; trainingDone: boolean; appeared: boolean; role: "starter" | "bench" | "out"; funds: number }) {
+  const state = normalizeDevelopmentState(input.state);
+  const requested = DEVELOPMENT_SUPPORT[state.plan.support];
+  const supportId: DevelopmentSupportId = !input.trainingDone && input.funds >= requested.cost ? state.plan.support : "club";
+  const support = DEVELOPMENT_SUPPORT[supportId];
+  // Zaplecze kupione w mikrocyklu zostało już rozliczone. Bez treningu działa jako osobny pakiet odnowy.
+  const passiveRecovery = input.trainingDone ? 0 : Math.round(support.recovery * .65);
+  const activityDelta = input.appeared ? (input.role === "starter" ? -16 : -9) : 10;
+  const energyDelta = input.appeared ? Math.min(0, activityDelta + passiveRecovery) : Math.min(20, activityDelta + passiveRecovery);
+  return {
+    energyDelta,
+    moneyCost: input.trainingDone ? 0 : support.cost,
+    supportId,
+    label: input.appeared ? (energyDelta < 0 ? "Koszt wysiłku meczowego" : "Mecz zbilansowany odnową") : "Tydzień odpoczynku i odbudowy",
+  };
+}
+
 function responseFor(state: DevelopmentState, seed: number, preview: ReturnType<typeof previewMicrocycle>) {
   const support = DEVELOPMENT_SUPPORT[state.plan.support];
   const first = nextRandom(hashSeed(`${seed}-${state.weekIndex}-${state.totalSessions}-${state.plan.main}-${state.plan.supplementary}-${state.plan.support}`));

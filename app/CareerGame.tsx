@@ -25,7 +25,7 @@ import { advancePlayerAvailability, advanceSquadWeek, createClubSquad, selectPla
 import {
   applyMicrocycle, applySeasonAging, DEVELOPMENT_SUPPORT, emptyDevelopmentState, forecastSession,
   normalizeDevelopmentState, previewMicrocycle, selectMicrocycleSession, setDevelopmentIntensity,
-  setDevelopmentSupport, type DevelopmentSupportId,
+  setDevelopmentSupport, settleWeeklyRecovery, type DevelopmentSupportId,
 } from "../game/development";
 import { acceptTransfer, createMarketState, generateTransferOffers, negotiateOffer, prepareWeeklyDecision, resolveContractSeason, resolveWeeklyDecision, settleCareerWeek, sponsorshipDecision, type TransferOffer } from "../game/career-market";
 import { advanceCompetitionsWeek, competitionRoundLabel, createCompetitions, getPlayerCompetitionFixture, getPlayerNationalFixture, recordPlayerCompetitionResult, updateCallUp } from "../game/competitions";
@@ -234,11 +234,14 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
     const advancedWorld = await advanceWorldWeekAsync(scoredWorld, career.leagueId, match.competitionKind === "league" ? fixture?.id : undefined);
     setWorld(advancedWorld);
     const appeared = match.playerRole !== "out";
+    const development = normalizeDevelopmentState(career.development);
+    const weeklyRecovery = settleWeeklyRecovery({ state: development, trainingDone: career.trainingDone, appeared, role: match.playerRole, funds: career.money });
     const nextAvailability = advancePlayerAvailability(career.availability ?? DEFAULT_AVAILABILITY, seed + career.week, career.energy, appeared);
     const nextAge = career.week === 30 ? career.age + 1 : career.age;
     const retired = career.retired || nextAge >= 36 + (seed % 5);
     const agedAttrs = career.week === 30 ? applySeasonAging(career.player.attrs, career.player.position, nextAge, career.player.potential) : career.player.attrs;
-    const settledMarket = settleCareerWeek(career.market ?? createMarketState(career.clubId, career.season, match.playerOvr, seed), { season: career.season, week: career.week, appeared, goals: match.stats.goals, rating: match.rating, won: match.scoreHome > match.scoreAway });
+    let settledMarket = settleCareerWeek(career.market ?? createMarketState(career.clubId, career.season, match.playerOvr, seed), { season: career.season, week: career.week, appeared, goals: match.stats.goals, rating: match.rating, won: match.scoreHome > match.scoreAway });
+    if (weeklyRecovery.moneyCost > 0) settledMarket = { ...settledMarket, ledger: [settledMarket.ledger[0], { id: `recovery-${career.season}-${career.week}`, season: career.season, week: career.week, amountEur: -weeklyRecovery.moneyCost / 4.3, label: `${DEVELOPMENT_SUPPORT[weeklyRecovery.supportId].label}: regeneracja bez treningu` }, ...settledMarket.ledger.slice(1)].slice(0, 100) };
     const contractResolution = advancedWorld.season !== career.season ? resolveContractSeason(settledMarket, advancedWorld.season) : { market: settledMarket, clubId: career.clubId };
     const resolvedClubId = contractResolution.clubId;
     const updatedClub = advancedWorld.clubs[resolvedClubId];
@@ -246,13 +249,13 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
     const nextWeek = career.week === 30 ? 1 : career.week + 1;
     const lifeMarket = prepareWeeklyDecision(sponsorshipDecision(contractResolution.market), advancedWorld.season, nextWeek, seed);
     const nextMarket = generateTransferOffers(advancedWorld, lifeMarket, { season: advancedWorld.season, week: nextWeek, age: nextAge, ovr: match.playerOvr, potential: career.player.potential, form: (career.energy + career.morale) / 2, position: career.player.position, currentClubId: resolvedClubId }, seed + career.week);
-    const income = nextMarket.ledger[0]?.id !== career.market?.ledger[0]?.id ? nextMarket.ledger[0]?.amountEur ?? 0 : 0;
+    const weeklyIncome = settledMarket.ledger.find((entry) => entry.id === `week-${career.season}-${career.week}`)?.amountEur ?? 0;
     let previousCompetitions = career.competitions ?? createCompetitions(world, career.nationality, match.playerOvr);
     if ((match.competitionKind === "cup" || match.competitionKind === "europe" || match.competitionKind === "national") && match.competitionFixtureId) previousCompetitions = recordPlayerCompetitionResult(previousCompetitions, { kind: match.competitionKind, fixtureId: match.competitionFixtureId, opponentId: match.competitionKind === "national" ? match.opponent.country : match.opponent.id, label: match.competitionKind }, match.competitionKind === "national" ? career.nationality : career.clubId, match.scoreHome, match.scoreAway);
     const completedCompetitions = advanceCompetitionsWeek(previousCompetitions, world, career.week, match.competitionKind === "cup" || match.competitionKind === "europe" ? career.clubId : undefined, match.competitionKind === "national" ? career.nationality : undefined);
     const advancedCompetitions = advancedWorld.season !== completedCompetitions.season ? createCompetitions(advancedWorld, career.nationality, match.playerOvr, completedCompetitions) : completedCompetitions;
     const nextCompetitions = updateCallUp(advancedCompetitions, career.nationality, match.playerOvr, (career.energy + career.morale) / 2, career.totals.matches * 75);
-    const nextMoney = career.money + Math.round(income * 4.3);
+    const nextMoney = Math.max(0, career.money + Math.round(weeklyIncome * 4.3) - weeklyRecovery.moneyCost);
     const nextTotals = { matches: career.totals.matches + (appeared ? 1 : 0), goals: career.totals.goals + match.stats.goals, assists: career.totals.assists + match.stats.assists, saves: career.totals.saves + match.stats.saves, rating: career.totals.rating + (appeared ? match.rating : 0) };
     let nextMeta = addWeeklyEvent(career.meta ?? defaultMetaGame(), career.season, career.week, seed);
     if (career.week === 30) {
@@ -264,9 +267,9 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
     setCareer({
       ...career, player: { ...career.player, attrs: agedAttrs }, week: career.week === 30 ? 1 : career.week + 1, season: advancedWorld.season, age: nextAge, retired,
       clubId: resolvedClubId, leagueId: `${updatedClub.country}-L${updatedClub.tier}`,
-      energy: clamp(career.energy - (appeared ? 16 : 4)), morale: clamp(career.morale + (match.scoreHome > match.scoreAway ? 5 : match.scoreHome < match.scoreAway ? -3 : 1)),
+      energy: clamp(career.energy + weeklyRecovery.energyDelta), morale: clamp(career.morale + (match.scoreHome > match.scoreAway ? 5 : match.scoreHome < match.scoreAway ? -3 : 1)),
       managerTrust: clamp(career.managerTrust + (match.rating - 6) * 2.2), trainingDone: false,
-      squad: nextSquad, availability: nextAvailability,
+      squad: nextSquad, availability: nextAvailability, development,
       market: nextMarket, money: nextMoney,
       competitions: nextCompetitions,
       totals: nextTotals, meta: nextMeta,

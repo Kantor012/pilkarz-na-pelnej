@@ -242,7 +242,7 @@ test("coach builds a deterministic squad and explains lineup hierarchy", async (
 });
 
 test("development workshop is uncertain, funded and always costs energy", async () => {
-  const { DEVELOPMENT_SUPPORT, emptyDevelopmentState, selectMicrocycleSession, setDevelopmentIntensity, setDevelopmentSupport, forecastSession, previewMicrocycle, applyMicrocycle, applySeasonAging } = await gameModule("/game/development.ts");
+  const { DEVELOPMENT_SUPPORT, emptyDevelopmentState, selectMicrocycleSession, setDevelopmentIntensity, setDevelopmentSupport, forecastSession, previewMicrocycle, applyMicrocycle, settleWeeklyRecovery, applySeasonAging } = await gameModule("/game/development.ts");
   const finish = { id: "finish", attrs: { strzal: 1, technika: .3 }, energy: -12 };
   const ball = { id: "ball", attrs: { technika: .8, drybling: .5 }, energy: -8 };
   const trainings = [finish, ball];
@@ -275,6 +275,16 @@ test("development workshop is uncertain, funded and always costs energy", async 
   assert.ok(result.state.traits.includes("Łowca pola karnego"));
   const noMoney = applyMicrocycle({ ...input, funds: 0 });
   assert.equal(noMoney.moneyCost, 0);
+  const restedWithClub = settleWeeklyRecovery({ state: setDevelopmentSupport(state,"club"), trainingDone:false, appeared:false, role:"out", funds:5000 });
+  const restedWithPremium = settleWeeklyRecovery({ state, trainingDone:false, appeared:false, role:"out", funds:5000 });
+  assert.ok(restedWithClub.energyDelta > 0, "a player outside the match must recover energy");
+  assert.ok(restedWithPremium.energyDelta > restedWithClub.energyDelta, "premium staff must improve a rest week");
+  assert.equal(restedWithPremium.moneyCost, DEVELOPMENT_SUPPORT.elite.cost);
+  const premiumStarter = settleWeeklyRecovery({ state, trainingDone:false, appeared:true, role:"starter", funds:5000 });
+  assert.ok(premiumStarter.energyDelta <= 0, "recovery must not create energy after a full match");
+  const trainedAndRested = settleWeeklyRecovery({ state, trainingDone:true, appeared:false, role:"out", funds:5000 });
+  assert.ok(trainedAndRested.energyDelta > 0);
+  assert.equal(trainedAndRested.moneyCost,0,"support already paid inside a completed microcycle cannot be charged twice");
   const aged = applySeasonAging(attrs, "Napastnik", 34, 90);
   assert.ok(aged.szybkosc < attrs.szybkosc);
 });
