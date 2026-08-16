@@ -20,6 +20,8 @@ export interface CareerSaveV3 {
   managerTrust: number;
   money: number;
   trainingDone: boolean;
+  weekEnergyStart?: number;
+  weekPlanEnergy?: number;
   offseason?: OffseasonState;
   hiddenTalent: string;
   hiddenRevealed: boolean;

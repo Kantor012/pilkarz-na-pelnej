@@ -240,7 +240,9 @@ function simulateMinute(state: MatchSimulationState, minute: number) {
 
 export function createMatch(input: CreateMatchInput, seed: number): MatchSimulationState {
   const roleResult = determineRole(input, seed);
-  const minutes = roleMinutes(roleResult.role, input.position, roleResult.state);
+  const minutes = input.forcedStartMinute !== undefined && roleResult.role === "bench"
+    ? { state: roleResult.state, start: clamp(Math.round(input.forcedStartMinute), 1, 89), end: 90 }
+    : roleMinutes(roleResult.role, input.position, roleResult.state);
   const generated = makeOpportunities(input, roleResult.role, minutes.start, minutes.end, minutes.state);
   const base: MatchSimulationState = {
     version: 1,

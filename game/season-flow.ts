@@ -13,3 +13,7 @@ export function beginOffseason(totalWeeks = DEFAULT_OFFSEASON_WEEKS): OffseasonS
 export function advanceOffseasonWeek(state: OffseasonState): OffseasonState | undefined {
   return state.week >= state.totalWeeks ? undefined : { ...state, week: state.week + 1 };
 }
+
+export function settleWeekEnergy(startEnergy: number, planDelta: number, matchDelta = 0) {
+  return Math.max(0, Math.min(100, startEnergy + planDelta + matchDelta));
+}

@@ -42,6 +42,8 @@ export interface PlayerAvailability {
 
 export interface LineupDecision {
   role: MatchRole;
+  matchRole: MatchRole;
+  willPlay: boolean;
   positionRank: number;
   score: number;
   reasons: string[];
@@ -82,7 +84,7 @@ function placesForPosition(formation: CoachProfile["formation"], position: Posit
 
 const memberScore = (member: SquadMember) => member.ovr * .62 + member.form * .18 + member.fitness * .12 + member.morale * .08;
 
-export function selectPlayerForMatch(squad: ClubSquadState, player: { position: Position; ovr: number; energy: number; morale: number; managerTrust: number; availability: PlayerAvailability }): LineupDecision {
+export function selectPlayerForMatch(squad: ClubSquadState, player: { position: Position; ovr: number; energy: number; morale: number; managerTrust: number; availability: PlayerAvailability }, matchSeed = 0): LineupDecision {
   const competitors = squad.members.filter((member) => member.position === player.position).sort((a, b) => memberScore(b) - memberScore(a));
   const score = player.ovr * .62 + player.energy * .12 + player.morale * .08 + player.managerTrust * .18;
   const available = player.availability.injuryWeeks <= 0 && player.availability.suspendedMatches <= 0;
@@ -98,8 +100,15 @@ export function selectPlayerForMatch(squad: ClubSquadState, player: { position: 
   if (player.energy < 45) reasons.push("niska energia obniża gotowość");
   if (player.availability.injuryWeeks > 0) reasons.unshift(`kontuzja: jeszcze ${player.availability.injuryWeeks} tyg.`);
   if (player.availability.suspendedMatches > 0) reasons.unshift("zawieszenie za kartki");
-  const predictedMinute = role === "bench" ? Math.round(72 - squad.coach.rotation * .22 - Math.max(0, score - 45) * .12) : role === "starter" ? 0 : null;
-  return { role, positionRank, score: Math.round(score * 10) / 10, reasons, competitors: competitors.slice(0, 5), predictedMinute };
+  const substitutionRoll = nextRandom(hashSeed(`${matchSeed}-${squad.clubId}-${player.position}-substitution`));
+  const substitutionChance = player.position === "Bramkarz"
+    ? .08 + squad.coach.rotation * .001
+    : Math.max(.42, Math.min(.88, .42 + squad.coach.rotation * .004 + player.managerTrust * .0015 + Math.max(0, score - 45) * .003));
+  const willPlay = role === "starter" || (role === "bench" && substitutionRoll.value < substitutionChance);
+  const matchRole: MatchRole = willPlay ? role : "out";
+  const predictedMinute = role === "bench" && willPlay ? Math.max(54, Math.min(78, Math.round(72 - squad.coach.rotation * .22 - Math.max(0, score - 45) * .12))) : role === "starter" ? 0 : null;
+  if (role === "bench") reasons.push(willPlay ? `trener zaplanował wejście około ${predictedMinute}. minuty` : "trener nie planuje zmiany na tej pozycji");
+  return { role, matchRole, willPlay, positionRank, score: Math.round(score * 10) / 10, reasons, competitors: competitors.slice(0, 5), predictedMinute };
 }
 
 export function advanceSquadWeek(squad: ClubSquadState, seed: number): ClubSquadState {

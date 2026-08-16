@@ -165,8 +165,8 @@ export function settleWeeklyRecovery(input: { state: DevelopmentState; trainingD
   // Zaplecze kupione w mikrocyklu zostało już rozliczone. Bez treningu przyznajemy dokładnie
   // wartość regeneracji widoczną na karcie sztabu, bez ukrytego mnożnika i dodatkowej premii.
   const recovery = input.trainingDone ? 0 : support.recovery;
-  const activityDelta = input.appeared ? (input.role === "starter" ? -16 : -9) : 0;
-  const energyDelta = input.appeared ? Math.min(0, activityDelta + recovery) : recovery;
+  const activityDelta = input.appeared ? (input.role === "starter" ? -10 : -5) : 0;
+  const energyDelta = activityDelta + recovery;
   return {
     energyDelta,
     moneyCost: input.trainingDone ? 0 : developmentSupportCost(supportId, input.weeklySalary ?? 0),

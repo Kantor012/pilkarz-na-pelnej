@@ -56,6 +56,12 @@ test("same seed and input create an identical deterministic match", async () => 
   const second = createMatch(input, 9981);
   assert.deepEqual(first, second);
   assert.deepEqual(advanceMatch(first, 18), advanceMatch(second, 18));
+  const substitute = createMatch({ ...input, forcedRole:"bench", forcedStartMinute:64 },9981);
+  const entered = advanceMatch(substitute,substitute.playerStartMinute);
+  assert.equal(entered.minute,64);
+  assert.ok(entered.events.some((item) => item.text.toLowerCase().includes("wchodzi")));
+  const skipped = advanceMatch(createMatch({ ...input, forcedRole:"out" },9981),90);
+  assert.equal(skipped.phase,"finished");
   assert.ok(first.opportunities.length <= 7);
   assert.ok(first.opportunities.every((opportunity) => opportunity.minute >= first.playerStartMinute));
   assert.ok(first.players.every((player) => player.x >= 0 && player.x <= 100 && player.y >= 0 && player.y <= 64));
@@ -236,9 +242,23 @@ test("coach builds a deterministic squad and explains lineup hierarchy", async (
   const star = selectPlayerForMatch(squad, { position: "Pomocnik", ovr: 92, energy: 90, morale: 90, managerTrust: 90, availability });
   const injured = selectPlayerForMatch(squad, { position: "Pomocnik", ovr: 92, energy: 90, morale: 90, managerTrust: 90, availability: { ...availability, injuryWeeks: 2 } });
   assert.equal(star.role, "starter");
+  assert.equal(star.willPlay,true);
+  assert.equal(star.matchRole,"starter");
   assert.equal(injured.role, "out");
+  assert.equal(injured.willPlay,false);
+  assert.equal(injured.matchRole,"out");
   assert.ok(star.reasons.length >= 3);
   assert.ok(star.competitors.length > 0);
+  let benchPlayer;
+  for (let ovr = 30; ovr <= 90 && !benchPlayer; ovr += 1) {
+    const candidate = { position:"Pomocnik", ovr, energy:70, morale:70, managerTrust:55, availability };
+    if (selectPlayerForMatch(squad,candidate,1).role === "bench") benchPlayer = candidate;
+  }
+  assert.ok(benchPlayer,"test squad should expose a bench threshold");
+  const benchDecisions = Array.from({length:160},(_,index) => selectPlayerForMatch(squad,benchPlayer,index+1));
+  assert.ok(benchDecisions.some((decision) => decision.willPlay));
+  assert.ok(benchDecisions.some((decision) => !decision.willPlay));
+  assert.ok(benchDecisions.filter((decision) => !decision.willPlay).every((decision) => decision.predictedMinute === null && decision.matchRole === "out"));
 });
 
 test("development workshop is uncertain, funded and uses exact energy arithmetic", async () => {
@@ -301,7 +321,9 @@ test("development workshop is uncertain, funded and uses exact energy arithmetic
   assert.equal(restedWithPremium.energyDelta, DEVELOPMENT_SUPPORT.elite.recovery, "premium staff must grant exactly the advertised recovery");
   assert.equal(restedWithPremium.moneyCost, developmentSupportCost("elite",6000));
   const premiumStarter = settleWeeklyRecovery({ state, trainingDone:false, appeared:true, role:"starter", funds:10000, weeklySalary:6000 });
-  assert.ok(premiumStarter.energyDelta <= 0, "recovery must not create energy after a full match");
+  assert.equal(premiumStarter.energyDelta,DEVELOPMENT_SUPPORT.elite.recovery - 10,"premium recovery should slightly outweigh a full match without training");
+  const trainedStarter = settleWeeklyRecovery({ state, trainingDone:true, appeared:true, role:"starter", funds:10000, weeklySalary:6000 });
+  assert.equal(trainedStarter.energyDelta,-10,"a completed plan already contains its recovery and only match load remains");
   const trainedAndRested = settleWeeklyRecovery({ state, trainingDone:true, appeared:false, role:"out", funds:10000, weeklySalary:6000 });
   assert.equal(trainedAndRested.energyDelta,0,"recovery already included in a microcycle cannot be applied twice");
   assert.equal(trainedAndRested.moneyCost,0,"support already paid inside a completed microcycle cannot be charged twice");
@@ -310,13 +332,15 @@ test("development workshop is uncertain, funded and uses exact energy arithmetic
 });
 
 test("six-week offseason adds about fifteen percent seasonal development", async () => {
-  const { advanceOffseasonWeek, beginOffseason, DEFAULT_OFFSEASON_WEEKS, DEVELOPMENT_GAIN_SCALE } = await gameModule("/game/season-flow.ts");
+  const { advanceOffseasonWeek, beginOffseason, DEFAULT_OFFSEASON_WEEKS, DEVELOPMENT_GAIN_SCALE, settleWeekEnergy } = await gameModule("/game/season-flow.ts");
   assert.equal(DEFAULT_OFFSEASON_WEEKS,6);
   assert.equal(Math.round(((30 + DEFAULT_OFFSEASON_WEEKS) * DEVELOPMENT_GAIN_SCALE / 30) * 1000) / 10,115.2);
   let offseason = beginOffseason();
   for (let week = 1; week < DEFAULT_OFFSEASON_WEEKS; week += 1) offseason = advanceOffseasonWeek(offseason);
   assert.equal(offseason.week,DEFAULT_OFFSEASON_WEEKS);
   assert.equal(advanceOffseasonWeek(offseason),undefined);
+  assert.equal(settleWeekEnergy(98,14,-10),100,"recovery cannot be lost by applying the 100% cap before match load");
+  assert.equal(settleWeekEnergy(40,14,-10),44);
 });
 
 test("contracts settle money, negotiate safely and loans return to parent club", async () => {

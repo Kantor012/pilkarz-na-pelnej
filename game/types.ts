@@ -217,6 +217,7 @@ export interface CreateMatchInput {
   playerClub: ClubProfile;
   opponent: ClubProfile;
   forcedRole?: MatchRole;
+  forcedStartMinute?: number;
   specialTraits?: string[];
 }
 
