@@ -361,7 +361,7 @@ test("coach builds a deterministic squad and explains lineup hierarchy", async (
 });
 
 test("development workshop is uncertain, funded and uses exact energy arithmetic", async () => {
-  const { DEVELOPMENT_SUPPORT, developmentSupportCost, emptyDevelopmentState, selectMicrocycleSession, setDevelopmentIntensity, setDevelopmentSupport, forecastSession, previewMicrocycle, applyMicrocycle, settleWeeklyRecovery, applySeasonAging } = await gameModule("/game/development.ts");
+  const { DEVELOPMENT_SUPPORT, clearMicrocycleSelection, developmentSupportCost, emptyDevelopmentState, selectMicrocycleSession, setDevelopmentIntensity, setDevelopmentSupport, forecastSession, previewMicrocycle, applyMicrocycle, settleWeeklyRecovery, applySeasonAging } = await gameModule("/game/development.ts");
   const finish = { id: "finish", attrs: { strzal: 1, technika: .3 }, energy: -12 };
   const ball = { id: "ball", attrs: { technika: .8, drybling: .5 }, energy: -8 };
   const trainings = [finish, ball];
@@ -394,6 +394,12 @@ test("development workshop is uncertain, funded and uses exact energy arithmetic
   assert.equal(noTrainingPreview.energyDelta, DEVELOPMENT_SUPPORT.elite.recovery,"no training must display the full advertised recovery");
   assert.equal(noTrainingPreview.injuryRisk,0);
   const attrs = { technika: 60, strzal: 60, podania: 60, drybling: 60, odbior: 60, szybkosc: 60, sila: 60, kondycja: 60, refleks: 60 };
+  const singleResult = applyMicrocycle({ state:singleLight, trainings, attrs, age:19, potential:90, positionWeight:weights, professionalism:70, facilities:1, seed:76, funds:10000, weeklySalary:6000 });
+  assert.equal(singleResult.state.plan.main,"ball","a confirmed single training must remain visible in the closed weekly plan");
+  assert.equal(singleResult.state.plan.supplementary,null);
+  assert.equal(singleResult.state.totalSessions,1);
+  assert.deepEqual(singleResult.report.sessionIds,["ball"]);
+  assert.equal(clearMicrocycleSelection(singleResult.state).plan.main,null,"the completed plan is cleared only when the next week starts");
   const recoveryOnly = applyMicrocycle({ state:noTraining, trainings, attrs, age:19, potential:90, positionWeight:weights, professionalism:70, facilities:1, seed:77, funds:10000, weeklySalary:6000 });
   assert.equal(recoveryOnly.energy,DEVELOPMENT_SUPPORT.elite.recovery);
   assert.equal(recoveryOnly.moneyCost,developmentSupportCost("elite",6000));

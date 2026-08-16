@@ -25,6 +25,7 @@ export interface DevelopmentReport {
   energyDelta: number;
   moneyCost: number;
   injuryRisk: number;
+  sessionIds?: string[];
 }
 export interface DevelopmentState {
   plan: MicrocyclePlan;
@@ -92,6 +93,11 @@ export function selectMicrocycleSession(state: DevelopmentState, trainingId: str
   else if (!plan.main) plan.main = trainingId;
   else plan.supplementary = trainingId;
   return { ...current, plan };
+}
+
+export function clearMicrocycleSelection(state: DevelopmentState) {
+  const current = normalizeDevelopmentState(state);
+  return { ...current, plan: { ...current.plan, main: null, supplementary: null, recovery: null } };
 }
 
 export function setDevelopmentIntensity(state: DevelopmentState, intensity: DevelopmentIntensity) {
@@ -203,12 +209,12 @@ export function applyMicrocycle(input: { state: DevelopmentState; trainings: Tra
       responseLabel: "PEŁNA REGENERACJA",
       summary: "Bez bodźca treningowego. Sztab odbudował energię, a pachołki dostały wolne.",
       attributeGains: {}, bankedProgress: 0, ovrGain: 0, energyDelta: preview.energyDelta,
-      moneyCost: developmentSupportCost(affordableSupport, input.weeklySalary ?? 0), injuryRisk: 0,
+      moneyCost: developmentSupportCost(affordableSupport, input.weeklySalary ?? 0), injuryRisk: 0, sessionIds: [],
     };
     return {
       attrs: { ...input.attrs }, energy: preview.energyDelta, ovrGain: 0, moneyCost: report.moneyCost, report,
       state: {
-        plan: { main: null, supplementary: null, recovery: null, intensity: effectiveState.plan.intensity, support: effectiveState.plan.support },
+        plan: { ...effectiveState.plan, recovery: null },
         recentSessions: effectiveState.recentSessions, traits: effectiveState.traits, weeklyLoad: 0,
         totalSessions: effectiveState.totalSessions, adaptation: effectiveState.adaptation,
         strain: Math.max(0, effectiveState.strain * .5 - DEVELOPMENT_SUPPORT[affordableSupport].recovery),
@@ -256,11 +262,12 @@ export function applyMicrocycle(input: { state: DevelopmentState; trainings: Tra
   const report: DevelopmentReport = {
     response: response.response, responseLabel: RESPONSE_LABELS[response.response], summary: summaries[response.response], attributeGains,
     bankedProgress, ovrGain, energyDelta: preview.energyDelta, moneyCost: developmentSupportCost(affordableSupport, input.weeklySalary ?? 0), injuryRisk: preview.injuryRisk,
+    sessionIds: completed,
   };
   return {
     attrs, energy: preview.energyDelta, ovrGain, moneyCost: report.moneyCost, report,
     state: {
-      plan: { main: null, supplementary: null, recovery: null, intensity: effectiveState.plan.intensity, support: effectiveState.plan.support },
+      plan: { ...effectiveState.plan, recovery: null },
       recentSessions, traits, weeklyLoad: preview.load, totalSessions: effectiveState.totalSessions + completed.length,
       adaptation, strain: nextStrain, weekIndex: effectiveState.weekIndex + 1, lastReport: report,
     } satisfies DevelopmentState,

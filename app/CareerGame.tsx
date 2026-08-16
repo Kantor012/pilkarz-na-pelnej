@@ -23,7 +23,7 @@ import {
 import { advanceWorldWeekAsync } from "../game/world-client";
 import { advancePlayerAvailability, advanceSquadWeek, createClubSquad, selectPlayerForMatch, type PlayerAvailability } from "../game/squad";
 import {
-  applyMicrocycle, applySeasonAging, DEVELOPMENT_SUPPORT, developmentSupportCost, emptyDevelopmentState, forecastSession,
+  applyMicrocycle, applySeasonAging, clearMicrocycleSelection, DEVELOPMENT_SUPPORT, developmentSupportCost, emptyDevelopmentState, forecastSession,
   normalizeDevelopmentState, previewMicrocycle, selectMicrocycleSession, setDevelopmentIntensity,
   setDevelopmentSupport, settleWeeklyRecovery, type DevelopmentSupportId,
 } from "../game/development";
@@ -238,9 +238,10 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
     const advancedWorld = await advanceWorldWeekAsync(scoredWorld, career.leagueId, match.competitionKind === "league" ? fixture?.id : undefined);
     setWorld(advancedWorld);
     const appeared = match.playerRole !== "out";
-    const development = normalizeDevelopmentState(career.development);
+    const completedDevelopment = normalizeDevelopmentState(career.development);
     const currentMarket = career.market ?? createMarketState(career.clubId, career.season, match.playerOvr, seed);
-    const weeklyRecovery = settleWeeklyRecovery({ state: development, trainingDone: career.trainingDone, appeared, role: match.playerRole, funds: career.money, weeklySalary: currentMarket.contract.weeklySalaryEur * 4.3 });
+    const weeklyRecovery = settleWeeklyRecovery({ state: completedDevelopment, trainingDone: career.trainingDone, appeared, role: match.playerRole, funds: career.money, weeklySalary: currentMarket.contract.weeklySalaryEur * 4.3 });
+    const development = clearMicrocycleSelection(completedDevelopment);
     const nextAvailability = advancePlayerAvailability(career.availability ?? DEFAULT_AVAILABILITY, seed + career.week, career.energy, appeared);
     const nextAge = career.week === 30 ? career.age + 1 : career.age;
     const retired = career.retired || nextAge >= 36 + (seed % 5);
@@ -327,7 +328,7 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
     const market = career.market ?? createMarketState(career.clubId, career.season, calculateOvr(career.player.position, career.player.attrs), seed);
     const salary = settleOffseasonWeek(market, career.season, career.offseason.week);
     const nextOffseason = advanceOffseasonWeek(career.offseason);
-    setCareer({ ...career, offseason: nextOffseason, trainingDone: false, weekEnergyStart: undefined, weekPlanEnergy: undefined, energy: settleWeekEnergy(career.weekEnergyStart ?? career.energy, career.weekPlanEnergy ?? 0), market: salary.market, money: career.money + Math.round(salary.amountEur * 4.3) });
+    setCareer({ ...career, offseason: nextOffseason, development: clearMicrocycleSelection(normalizeDevelopmentState(career.development)), trainingDone: false, weekEnergyStart: undefined, weekPlanEnergy: undefined, energy: settleWeekEnergy(career.weekEnergyStart ?? career.energy, career.weekPlanEnergy ?? 0), market: salary.market, money: career.money + Math.round(salary.amountEur * 4.3) });
     setView(nextOffseason ? "training" : "home");
   };
 
@@ -386,6 +387,15 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
   const development = normalizeDevelopmentState(career.development);
   const weeklySalaryPln = market.contract.weeklySalaryEur * 4.3;
   const developmentPreview = previewMicrocycle({ state: development, trainings: TRAININGS, age: career.age, positionWeight: WEIGHTS[career.player.position], weeklySalary: weeklySalaryPln });
+  const legacyCompletedIds = career.trainingDone && !development.plan.main && development.lastReport?.bankedProgress
+    ? development.lastReport.sessionIds?.length ? development.lastReport.sessionIds : development.recentSessions.slice(-1)
+    : [];
+  const displayedMain = development.plan.main ?? legacyCompletedIds[0] ?? null;
+  const displayedSupplementary = development.plan.supplementary ?? legacyCompletedIds[1] ?? null;
+  const completedSessionCount = [displayedMain, displayedSupplementary].filter(Boolean).length;
+  const displayedEnergyDelta = career.trainingDone ? development.lastReport?.energyDelta ?? developmentPreview.energyDelta : developmentPreview.energyDelta;
+  const displayedMoneyCost = career.trainingDone ? development.lastReport?.moneyCost ?? developmentPreview.moneyCost : developmentPreview.moneyCost;
+  const displayedInjuryRisk = career.trainingDone ? development.lastReport?.injuryRisk ?? developmentPreview.injuryRisk : developmentPreview.injuryRisk;
 
   return <main className="v3-career">
     <header className="v3-top"><div className="v3-brand"><div className="brand-mark">P:N:P</div><strong>PIŁKARZ: NA PEŁNEJ</strong></div><div className="v3-season">SEZON {career.season} • {career.offseason ? `PRZERWA ${career.offseason.week}/${career.offseason.totalWeeks}` : `TYDZIEŃ ${career.week}`}</div><button onClick={() => void reset()}>NOWA KARIERA</button></header>
@@ -411,15 +421,15 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
 
           <section className="v3-development-status">
             <article><small>REAKCJA ORGANIZMU</small><strong>{development.strain < 25 ? "ŚWIEŻY" : development.strain < 55 ? "OBCIĄŻONY" : "NA GRANICY"}</strong><span>zmęczenie ukryte {Math.round(development.strain)}%</span></article>
-            <article><small>PROGNOZA ROZWOJU</small><strong>{developmentPreview.sessions ? `${developmentPreview.range[0].toFixed(2)}–${developmentPreview.range[1].toFixed(2)} OVR` : career.trainingDone ? "TYDZIEŃ REGENERACYJNY" : "BEZ TRENINGU"}</strong><span>{developmentPreview.sessions ? "to przedział, nie obietnica" : "pełna energia z wybranego zaplecza"}</span></article>
-            <article><small>BILANS TYGODNIA</small><strong className={developmentPreview.energyDelta < 0 ? "negative" : ""}>{developmentPreview.energyDelta > 0 ? "+" : ""}{developmentPreview.energyDelta} energii</strong><span>koszt jednostek + regeneracja sztabu</span></article>
-            <article><small>BUDŻET ROZWOJU</small><strong>{developmentPreview.moneyCost} zł</strong><span>konto: {career.money} zł</span></article>
+            <article><small>{career.trainingDone ? "WYKONANY PLAN" : "PROGNOZA ROZWOJU"}</small><strong>{career.trainingDone && completedSessionCount ? `${completedSessionCount} ${completedSessionCount === 1 ? "TRENING" : "TRENINGI"} • ${development.lastReport?.responseLabel ?? "WYKONANO"}` : developmentPreview.sessions ? `${developmentPreview.range[0].toFixed(2)}–${developmentPreview.range[1].toFixed(2)} OVR` : career.trainingDone ? "TYDZIEŃ REGENERACYJNY" : "BEZ TRENINGU"}</strong><span>{career.trainingDone && completedSessionCount ? "wybrane jednostki zostały rozliczone" : developmentPreview.sessions ? "to przedział, nie obietnica" : "pełna energia z wybranego zaplecza"}</span></article>
+            <article><small>BILANS TYGODNIA</small><strong className={displayedEnergyDelta < 0 ? "negative" : ""}>{displayedEnergyDelta > 0 ? "+" : ""}{displayedEnergyDelta} energii</strong><span>koszt jednostek + regeneracja sztabu</span></article>
+            <article><small>BUDŻET ROZWOJU</small><strong>{displayedMoneyCost} zł</strong><span>konto: {career.money} zł</span></article>
           </section>
 
-          <div className="v3-cycle-slots"><span><small>BODZIEC GŁÓWNY</small><b>{TRAININGS.find((item) => item.id === development.plan.main)?.title ?? "bez treningu — pełna regeneracja"}</b></span><span><small>BODZIEC UZUPEŁNIAJĄCY</small><b>{TRAININGS.find((item) => item.id === development.plan.supplementary)?.title ?? "opcjonalny"}</b></span><span><small>ZAPLECZE</small><b>{DEVELOPMENT_SUPPORT[development.plan.support].label}</b></span><button disabled={career.trainingDone} onClick={executeMicrocycle}>{development.plan.main ? "ZAMYKAM PLAN TYGODNIA" : "ZATWIERDZAM REGENERACJĘ"}</button></div>
+          <div className="v3-cycle-slots"><span><small>BODZIEC GŁÓWNY</small><b>{TRAININGS.find((item) => item.id === displayedMain)?.title ?? "bez treningu — pełna regeneracja"}</b></span><span><small>BODZIEC UZUPEŁNIAJĄCY</small><b>{TRAININGS.find((item) => item.id === displayedSupplementary)?.title ?? "opcjonalny"}</b></span><span><small>ZAPLECZE</small><b>{DEVELOPMENT_SUPPORT[development.plan.support].label}</b></span><button disabled={career.trainingDone} onClick={executeMicrocycle}>{career.trainingDone ? "PLAN ZAMKNIĘTY" : development.plan.main ? "ZAMYKAM PLAN TYGODNIA" : "ZATWIERDZAM REGENERACJĘ"}</button></div>
 
-          <div className="v3-training-section-label"><div><span>01</span><p><b>WYBIERZ DO DWÓCH BODŹCÓW ALBO ODPOCZNIJ</b><small>Brak wyboru oznacza pełną regenerację. Pierwsze kliknięcie ustawia trening główny, drugie uzupełniający.</small></p></div><em>RYZYKO URAZU {developmentPreview.injuryRisk}%</em></div>
-          <div className="v3-trainings">{TRAININGS.map((training) => { const slot = development.plan.main === training.id ? "GŁÓWNY" : development.plan.supplementary === training.id ? "UZUPEŁNIAJĄCY" : null; const forecast = forecastSession(development, training, career.age, WEIGHTS[career.player.position], slot === "UZUPEŁNIAJĄCY" ? "supplementary" : "main"); const rank = [...TRAININGS].sort((a,b) => Object.entries(b.attrs).reduce((sum,[key,gain]) => sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)-Object.entries(a.attrs).reduce((sum,[key,gain])=>sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)).indexOf(training)+1; return <button key={training.id} className={slot ? "selected-session" : ""} disabled={career.trainingDone} onClick={() => chooseTraining(training)}><FontAwesomeIcon icon={training.icon} /><div><small>{training.category}</small><strong>{training.title}</strong><p>{training.copy}</p></div><span>{forecast.range[0].toFixed(2)}–{forecast.range[1].toFixed(2)} OVR {slot ? <em>{slot}</em> : rank <= 3 && <em>WPŁYW P{rank}</em>}</span><footer>{Object.keys(training.attrs).map((key) => <b key={key}>{ATTR_LABELS[key as AttrKey]}</b>)}<i>przełom ok. {forecast.breakthroughChance}%</i><i className="negative">{forecast.energy} energii</i></footer></button>; })}</div>
+          <div className="v3-training-section-label"><div><span>01</span><p><b>WYBIERZ DO DWÓCH BODŹCÓW ALBO ODPOCZNIJ</b><small>Brak wyboru oznacza pełną regenerację. Pierwsze kliknięcie ustawia trening główny, drugie uzupełniający.</small></p></div><em>RYZYKO URAZU {displayedInjuryRisk}%</em></div>
+          <div className="v3-trainings">{TRAININGS.map((training) => { const slot = displayedMain === training.id ? "GŁÓWNY" : displayedSupplementary === training.id ? "UZUPEŁNIAJĄCY" : null; const forecast = forecastSession(development, training, career.age, WEIGHTS[career.player.position], slot === "UZUPEŁNIAJĄCY" ? "supplementary" : "main"); const rank = [...TRAININGS].sort((a,b) => Object.entries(b.attrs).reduce((sum,[key,gain]) => sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)-Object.entries(a.attrs).reduce((sum,[key,gain])=>sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)).indexOf(training)+1; return <button key={training.id} className={slot ? "selected-session" : ""} disabled={career.trainingDone} onClick={() => chooseTraining(training)}><FontAwesomeIcon icon={training.icon} /><div><small>{training.category}</small><strong>{training.title}</strong><p>{training.copy}</p></div><span>{forecast.range[0].toFixed(2)}–{forecast.range[1].toFixed(2)} OVR {slot ? <em>{slot}</em> : rank <= 3 && <em>WPŁYW P{rank}</em>}</span><footer>{Object.keys(training.attrs).map((key) => <b key={key}>{ATTR_LABELS[key as AttrKey]}</b>)}<i>przełom ok. {forecast.breakthroughChance}%</i><i className="negative">{forecast.energy} energii</i></footer></button>; })}</div>
 
           <div className="v3-training-section-label"><div><span>02</span><p><b>KUP LUB WYBIERZ ZAPLECZE</b><small>Pieniądze z kontraktu stabilizują rozwój i regenerację, ale nie kupują gwarantowanego wyniku.</small></p></div></div>
           <div className="v3-development-support">{(Object.entries(DEVELOPMENT_SUPPORT) as Array<[DevelopmentSupportId, (typeof DEVELOPMENT_SUPPORT)[DevelopmentSupportId]]>).map(([id,support]) => { const cost = developmentSupportCost(id, weeklySalaryPln); return <button key={id} className={development.plan.support === id ? "active" : ""} disabled={career.trainingDone || career.money < cost} onClick={() => chooseDevelopmentSupport(id)}><span>{cost ? `${cost.toLocaleString("pl-PL")} zł` : "W KONTRAKCIE"}</span><strong>{support.label}</strong><p>{support.copy}</p><small>{support.salaryShare ? `${Math.round(support.salaryShare*100)}% tygodniówki • ` : ""}regeneracja +{support.recovery} • stabilność +{Math.round(support.stability*100)}%</small></button>; })}</div>
