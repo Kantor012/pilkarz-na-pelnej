@@ -23,7 +23,7 @@ import {
 import { advanceWorldWeekAsync } from "../game/world-client";
 import { advancePlayerAvailability, advanceSquadWeek, createClubSquad, selectPlayerForMatch, type PlayerAvailability } from "../game/squad";
 import {
-  applyMicrocycle, applySeasonAging, DEVELOPMENT_SUPPORT, emptyDevelopmentState, forecastSession,
+  applyMicrocycle, applySeasonAging, DEVELOPMENT_SUPPORT, developmentSupportCost, emptyDevelopmentState, forecastSession,
   normalizeDevelopmentState, previewMicrocycle, selectMicrocycleSession, setDevelopmentIntensity,
   setDevelopmentSupport, settleWeeklyRecovery, type DevelopmentSupportId,
 } from "../game/development";
@@ -235,12 +235,13 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
     setWorld(advancedWorld);
     const appeared = match.playerRole !== "out";
     const development = normalizeDevelopmentState(career.development);
-    const weeklyRecovery = settleWeeklyRecovery({ state: development, trainingDone: career.trainingDone, appeared, role: match.playerRole, funds: career.money });
+    const currentMarket = career.market ?? createMarketState(career.clubId, career.season, match.playerOvr, seed);
+    const weeklyRecovery = settleWeeklyRecovery({ state: development, trainingDone: career.trainingDone, appeared, role: match.playerRole, funds: career.money, weeklySalary: currentMarket.contract.weeklySalaryEur * 4.3 });
     const nextAvailability = advancePlayerAvailability(career.availability ?? DEFAULT_AVAILABILITY, seed + career.week, career.energy, appeared);
     const nextAge = career.week === 30 ? career.age + 1 : career.age;
     const retired = career.retired || nextAge >= 36 + (seed % 5);
     const agedAttrs = career.week === 30 ? applySeasonAging(career.player.attrs, career.player.position, nextAge, career.player.potential) : career.player.attrs;
-    let settledMarket = settleCareerWeek(career.market ?? createMarketState(career.clubId, career.season, match.playerOvr, seed), { season: career.season, week: career.week, appeared, goals: match.stats.goals, rating: match.rating, won: match.scoreHome > match.scoreAway });
+    let settledMarket = settleCareerWeek(currentMarket, { season: career.season, week: career.week, appeared, goals: match.stats.goals, rating: match.rating, won: match.scoreHome > match.scoreAway });
     if (weeklyRecovery.moneyCost > 0) settledMarket = { ...settledMarket, ledger: [settledMarket.ledger[0], { id: `recovery-${career.season}-${career.week}`, season: career.season, week: career.week, amountEur: -weeklyRecovery.moneyCost / 4.3, label: `${DEVELOPMENT_SUPPORT[weeklyRecovery.supportId].label}: regeneracja bez treningu` }, ...settledMarket.ledger.slice(1)].slice(0, 100) };
     const contractResolution = advancedWorld.season !== career.season ? resolveContractSeason(settledMarket, advancedWorld.season) : { market: settledMarket, clubId: career.clubId };
     const resolvedClubId = contractResolution.clubId;
@@ -298,7 +299,9 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
   };
 
   const chooseDevelopmentSupport = (support: DevelopmentSupportId) => {
-    if (!career || career.trainingDone || career.money < DEVELOPMENT_SUPPORT[support].cost) return;
+    if (!career || career.trainingDone) return;
+    const market = career.market ?? createMarketState(career.clubId, career.season, calculateOvr(career.player.position, career.player.attrs), seed);
+    if (career.money < developmentSupportCost(support, market.contract.weeklySalaryEur * 4.3)) return;
     setCareer({ ...career, development: setDevelopmentSupport(normalizeDevelopmentState(career.development), support) });
   };
 
@@ -306,9 +309,9 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
     if (!career || !world || career.trainingDone) return;
     const development = normalizeDevelopmentState(career.development);
     if (!development.plan.main) return;
-    const result = applyMicrocycle({ state: development, trainings: TRAININGS, attrs: career.player.attrs, age: career.age, potential: career.player.potential, positionWeight: WEIGHTS[career.player.position], professionalism: career.managerTrust, facilities: world.clubs[career.clubId].facilities, seed: seed + career.season * 1000 + career.week * 31, funds: career.money });
-    const trainingCount = career.trainingCount + [development.plan.main, development.plan.supplementary].filter(Boolean).length;
     const market = career.market ?? createMarketState(career.clubId, career.season, calculateOvr(career.player.position, career.player.attrs), seed);
+    const result = applyMicrocycle({ state: development, trainings: TRAININGS, attrs: career.player.attrs, age: career.age, potential: career.player.potential, positionWeight: WEIGHTS[career.player.position], professionalism: career.managerTrust, facilities: world.clubs[career.clubId].facilities, seed: seed + career.season * 1000 + career.week * 31, funds: career.money, weeklySalary: market.contract.weeklySalaryEur * 4.3 });
+    const trainingCount = career.trainingCount + [development.plan.main, development.plan.supplementary].filter(Boolean).length;
     const trainingEntry = result.moneyCost > 0 ? [{ id: `development-${career.season}-${career.week}`, season: career.season, week: career.week, amountEur: -result.moneyCost / 4.3, label: `Wsparcie rozwoju: ${DEVELOPMENT_SUPPORT[development.plan.support].label}` }, ...market.ledger].slice(0, 100) : market.ledger;
     setCareer({ ...career, player: { ...career.player, attrs: result.attrs }, development: result.state, trainingDone: true, trainingCount, hiddenRevealed: career.hiddenRevealed || trainingCount >= 3, energy: clamp(career.energy + result.energy), money: Math.max(0, career.money - result.moneyCost), market: { ...market, ledger: trainingEntry }, managerTrust: clamp(career.managerTrust + (result.report.response === "overload" ? -.5 : .8)) });
   };
@@ -365,7 +368,8 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
   const competitions = career.competitions ?? createCompetitions(world, career.nationality, playerOvr);
   const meta = career.meta ?? defaultMetaGame();
   const development = normalizeDevelopmentState(career.development);
-  const developmentPreview = previewMicrocycle({ state: development, trainings: TRAININGS, age: career.age, positionWeight: WEIGHTS[career.player.position] });
+  const weeklySalaryPln = market.contract.weeklySalaryEur * 4.3;
+  const developmentPreview = previewMicrocycle({ state: development, trainings: TRAININGS, age: career.age, positionWeight: WEIGHTS[career.player.position], weeklySalary: weeklySalaryPln });
 
   return <main className="v3-career">
     <header className="v3-top"><div className="v3-brand"><div className="brand-mark">P:N:P</div><strong>PIŁKARZ: NA PEŁNEJ</strong></div><div className="v3-season">SEZON {career.season} • TYDZIEŃ {career.week}</div><button onClick={() => void reset()}>NOWA KARIERA</button></header>
@@ -402,7 +406,7 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
           <div className="v3-trainings">{TRAININGS.map((training) => { const slot = development.plan.main === training.id ? "GŁÓWNY" : development.plan.supplementary === training.id ? "UZUPEŁNIAJĄCY" : null; const forecast = forecastSession(development, training, career.age, WEIGHTS[career.player.position], slot === "UZUPEŁNIAJĄCY" ? "supplementary" : "main"); const rank = [...TRAININGS].sort((a,b) => Object.entries(b.attrs).reduce((sum,[key,gain]) => sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)-Object.entries(a.attrs).reduce((sum,[key,gain])=>sum+(gain??0)*(WEIGHTS[career.player.position][key as AttrKey]??0),0)).indexOf(training)+1; return <button key={training.id} className={slot ? "selected-session" : ""} disabled={career.trainingDone} onClick={() => chooseTraining(training)}><FontAwesomeIcon icon={training.icon} /><div><small>{training.category}</small><strong>{training.title}</strong><p>{training.copy}</p></div><span>{forecast.range[0].toFixed(2)}–{forecast.range[1].toFixed(2)} OVR {slot ? <em>{slot}</em> : rank <= 3 && <em>WPŁYW P{rank}</em>}</span><footer>{Object.keys(training.attrs).map((key) => <b key={key}>{ATTR_LABELS[key as AttrKey]}</b>)}<i>przełom ok. {forecast.breakthroughChance}%</i><i className="negative">{forecast.energy} energii</i></footer></button>; })}</div>
 
           <div className="v3-training-section-label"><div><span>02</span><p><b>KUP LUB WYBIERZ ZAPLECZE</b><small>Pieniądze z kontraktu stabilizują rozwój i regenerację, ale nie kupują gwarantowanego wyniku.</small></p></div></div>
-          <div className="v3-development-support">{(Object.entries(DEVELOPMENT_SUPPORT) as Array<[DevelopmentSupportId, (typeof DEVELOPMENT_SUPPORT)[DevelopmentSupportId]]>).map(([id,support]) => <button key={id} className={development.plan.support === id ? "active" : ""} disabled={career.trainingDone || career.money < support.cost} onClick={() => chooseDevelopmentSupport(id)}><span>{support.cost ? `${support.cost} zł` : "W KONTRAKCIE"}</span><strong>{support.label}</strong><p>{support.copy}</p><small>regeneracja +{support.recovery} • stabilność +{Math.round(support.stability*100)}%</small></button>)}</div>
+          <div className="v3-development-support">{(Object.entries(DEVELOPMENT_SUPPORT) as Array<[DevelopmentSupportId, (typeof DEVELOPMENT_SUPPORT)[DevelopmentSupportId]]>).map(([id,support]) => { const cost = developmentSupportCost(id, weeklySalaryPln); return <button key={id} className={development.plan.support === id ? "active" : ""} disabled={career.trainingDone || career.money < cost} onClick={() => chooseDevelopmentSupport(id)}><span>{cost ? `${cost.toLocaleString("pl-PL")} zł` : "W KONTRAKCIE"}</span><strong>{support.label}</strong><p>{support.copy}</p><small>{support.salaryShare ? `${Math.round(support.salaryShare*100)}% tygodniówki • ` : ""}regeneracja +{support.recovery} • stabilność +{Math.round(support.stability*100)}%</small></button>; })}</div>
 
           {career.trainingDone && development.lastReport && <section className={`v3-development-report response-${development.lastReport.response}`}><div><span>RAPORT SZTABU</span><strong>{development.lastReport.responseLabel}</strong><p>{development.lastReport.summary}</p></div><dl><div><dt>REALNY SKOK OVR</dt><dd>+{development.lastReport.ovrGain.toFixed(2)}</dd></div><div><dt>POSTĘP W BANKU</dt><dd>{development.lastReport.bankedProgress.toFixed(2)} pkt</dd></div><div><dt>ENERGIA</dt><dd>{development.lastReport.energyDelta}</dd></div><div><dt>KOSZT</dt><dd>{development.lastReport.moneyCost} zł</dd></div></dl><footer>{Object.keys(development.lastReport.attributeGains).length ? Object.entries(development.lastReport.attributeGains).map(([key,value]) => <b key={key}>+{value} {ATTR_LABELS[key as AttrKey]}</b>) : <b>Brak pełnego punktu — postęp został w banku adaptacji.</b>}</footer></section>}
         </>}

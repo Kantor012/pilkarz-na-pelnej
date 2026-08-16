@@ -37,12 +37,18 @@ export interface DevelopmentState {
   lastReport: DevelopmentReport | null;
 }
 
-export const DEVELOPMENT_SUPPORT: Record<DevelopmentSupportId, { label: string; copy: string; cost: number; recovery: number; learning: number; stability: number }> = {
-  club: { label: "Zaplecze klubowe", copy: "W cenie kontraktu. Fizjo ma kolejkę, ale zna twoje kolano.", cost: 0, recovery: 5, learning: 1, stability: 0 },
-  analysis: { label: "Analiza indywidualna", copy: "Nagrania, dane i mniej zgadywania. Podnosi szansę trafionej adaptacji.", cost: 180, recovery: 7, learning: 1.07, stability: .04 },
-  personal: { label: "Trener + fizjoterapeuta", copy: "Plan pod ciebie, nie pod 24 chłopa i pachołek bez powietrza.", cost: 550, recovery: 10, learning: 1.14, stability: .09 },
-  elite: { label: "Sztab premium", copy: "Diagnostyka, odnowa i człowiek, który zabiera telefon przed snem.", cost: 1200, recovery: 14, learning: 1.22, stability: .14 },
+export const DEVELOPMENT_SUPPORT: Record<DevelopmentSupportId, { label: string; copy: string; baseCost: number; salaryShare: number; recovery: number; learning: number; stability: number }> = {
+  club: { label: "Zaplecze klubowe", copy: "W cenie kontraktu. Fizjo ma kolejkę, ale zna twoje kolano.", baseCost: 0, salaryShare: 0, recovery: 5, learning: 1, stability: 0 },
+  analysis: { label: "Analiza indywidualna", copy: "Nagrania, dane i mniej zgadywania. Podnosi szansę trafionej adaptacji.", baseCost: 200, salaryShare: .15, recovery: 7, learning: 1.07, stability: .04 },
+  personal: { label: "Trener + fizjoterapeuta", copy: "Plan pod ciebie, nie pod 24 chłopa i pachołek bez powietrza.", baseCost: 750, salaryShare: .45, recovery: 10, learning: 1.14, stability: .09 },
+  elite: { label: "Sztab premium", copy: "Diagnostyka, odnowa i człowiek, który zabiera telefon przed snem.", baseCost: 1800, salaryShare: .95, recovery: 14, learning: 1.22, stability: .14 },
 };
+
+export function developmentSupportCost(id: DevelopmentSupportId, weeklySalary: number) {
+  const support = DEVELOPMENT_SUPPORT[id];
+  if (id === "club") return 0;
+  return Math.ceil(Math.max(support.baseCost, Math.max(0, weeklySalary) * support.salaryShare) / 50) * 50;
+}
 
 const INTENSITY = {
   lekki: { growth: .72, cost: .72, load: 7 },
@@ -131,7 +137,7 @@ export function forecastSession(state: DevelopmentState, training: TrainingDefin
   };
 }
 
-export function previewMicrocycle(input: { state: DevelopmentState; trainings: TrainingDefinition[]; age: number; positionWeight: Partial<Record<AttrKey, number>> }) {
+export function previewMicrocycle(input: { state: DevelopmentState; trainings: TrainingDefinition[]; age: number; positionWeight: Partial<Record<AttrKey, number>>; weeklySalary?: number }) {
   const state = normalizeDevelopmentState(input.state);
   const selected = (["main", "supplementary"] as const)
     .map((slot) => ({ slot, id: state.plan[slot] }))
@@ -147,13 +153,13 @@ export function previewMicrocycle(input: { state: DevelopmentState; trainings: T
   const range = forecasts.reduce(([low, high], item) => [low + item.range[0], high + item.range[1]], [0, 0]);
   const load = Math.min(100, Math.abs(trainingEnergy) * 2.1 + INTENSITY[state.plan.intensity].load + state.strain * .25 - support.recovery * .7);
   const injuryRisk = Math.round(Math.max(1, Math.min(32, 2 + load * .16 + state.strain * .11 - support.stability * 35)));
-  return { energyDelta, range: range as [number, number], load: Math.round(load), injuryRisk, moneyCost: support.cost, sessions: forecasts.length };
+  return { energyDelta, range: range as [number, number], load: Math.round(load), injuryRisk, moneyCost: developmentSupportCost(state.plan.support, input.weeklySalary ?? 0), sessions: forecasts.length };
 }
 
-export function settleWeeklyRecovery(input: { state: DevelopmentState; trainingDone: boolean; appeared: boolean; role: "starter" | "bench" | "out"; funds: number }) {
+export function settleWeeklyRecovery(input: { state: DevelopmentState; trainingDone: boolean; appeared: boolean; role: "starter" | "bench" | "out"; funds: number; weeklySalary?: number }) {
   const state = normalizeDevelopmentState(input.state);
-  const requested = DEVELOPMENT_SUPPORT[state.plan.support];
-  const supportId: DevelopmentSupportId = !input.trainingDone && input.funds >= requested.cost ? state.plan.support : "club";
+  const requestedCost = developmentSupportCost(state.plan.support, input.weeklySalary ?? 0);
+  const supportId: DevelopmentSupportId = !input.trainingDone && input.funds >= requestedCost ? state.plan.support : "club";
   const support = DEVELOPMENT_SUPPORT[supportId];
   // Zaplecze kupione w mikrocyklu zostało już rozliczone. Bez treningu działa jako osobny pakiet odnowy.
   const passiveRecovery = input.trainingDone ? 0 : Math.round(support.recovery * .65);
@@ -161,7 +167,7 @@ export function settleWeeklyRecovery(input: { state: DevelopmentState; trainingD
   const energyDelta = input.appeared ? Math.min(0, activityDelta + passiveRecovery) : Math.min(20, activityDelta + passiveRecovery);
   return {
     energyDelta,
-    moneyCost: input.trainingDone ? 0 : support.cost,
+    moneyCost: input.trainingDone ? 0 : developmentSupportCost(supportId, input.weeklySalary ?? 0),
     supportId,
     label: input.appeared ? (energyDelta < 0 ? "Koszt wysiłku meczowego" : "Mecz zbilansowany odnową") : "Tydzień odpoczynku i odbudowy",
   };
@@ -180,12 +186,12 @@ function responseFor(state: DevelopmentState, seed: number, preview: ReturnType<
   return { response, multiplier };
 }
 
-export function applyMicrocycle(input: { state: DevelopmentState; trainings: TrainingDefinition[]; attrs: Attributes; age: number; potential: number; positionWeight: Partial<Record<AttrKey, number>>; professionalism: number; facilities: number; seed?: number; funds?: number }) {
+export function applyMicrocycle(input: { state: DevelopmentState; trainings: TrainingDefinition[]; attrs: Attributes; age: number; potential: number; positionWeight: Partial<Record<AttrKey, number>>; professionalism: number; facilities: number; seed?: number; funds?: number; weeklySalary?: number }) {
   const state = normalizeDevelopmentState(input.state);
-  const requestedSupport = DEVELOPMENT_SUPPORT[state.plan.support];
-  const affordableSupport = input.funds === undefined || input.funds >= requestedSupport.cost ? state.plan.support : "club";
+  const requestedCost = developmentSupportCost(state.plan.support, input.weeklySalary ?? 0);
+  const affordableSupport = input.funds === undefined || input.funds >= requestedCost ? state.plan.support : "club";
   const effectiveState = affordableSupport === state.plan.support ? state : { ...state, plan: { ...state.plan, support: affordableSupport } };
-  const preview = previewMicrocycle({ state: effectiveState, trainings: input.trainings, age: input.age, positionWeight: input.positionWeight });
+  const preview = previewMicrocycle({ state: effectiveState, trainings: input.trainings, age: input.age, positionWeight: input.positionWeight, weeklySalary: input.weeklySalary });
   const selected = (["main", "supplementary"] as const)
     .map((slot) => ({ slot, id: effectiveState.plan[slot] }))
     .filter((item): item is { slot: "main" | "supplementary"; id: string } => Boolean(item.id));
@@ -228,7 +234,7 @@ export function applyMicrocycle(input: { state: DevelopmentState; trainings: Tra
   };
   const report: DevelopmentReport = {
     response: response.response, responseLabel: RESPONSE_LABELS[response.response], summary: summaries[response.response], attributeGains,
-    bankedProgress, ovrGain, energyDelta: preview.energyDelta, moneyCost: DEVELOPMENT_SUPPORT[affordableSupport].cost, injuryRisk: preview.injuryRisk,
+    bankedProgress, ovrGain, energyDelta: preview.energyDelta, moneyCost: developmentSupportCost(affordableSupport, input.weeklySalary ?? 0), injuryRisk: preview.injuryRisk,
   };
   return {
     attrs, energy: preview.energyDelta, ovrGain, moneyCost: report.moneyCost, report,
