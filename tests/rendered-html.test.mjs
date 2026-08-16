@@ -121,7 +121,7 @@ test("ambient match simulation creates goals and chances for both teams", async 
   let nonGoalShots = 0;
   const samples = 1200;
   for (let seed = 1; seed <= samples; seed += 1) {
-    const created = createMatch({ playerName: "Test", playerNumber: 1, position: "Bramkarz", attrs, playerOvr: 60, energy: 78, morale: 70, managerTrust: 65, teamStrength: club.strength, playerClub: club, opponent }, seed);
+    const created = createMatch({ playerName: "Test", playerNumber: 8, position: "Pomocnik", attrs, playerOvr: 60, energy: 78, morale: 70, managerTrust: 65, teamStrength: club.strength, playerClub: club, opponent, forcedRole: "out" }, seed);
     const match = advanceMatch({ ...created, opportunities: [] }, 90);
     homeGoals += match.scoreHome;
     awayGoals += match.scoreAway;
@@ -134,6 +134,64 @@ test("ambient match simulation creates goals and chances for both teams", async 
   assert.ok(awayGoals / samples > 1.1, "the opponent should remain dangerous");
   assert.ok(scoreless / samples < 0.12, "0:0 results should be uncommon");
   assert.ok(nonGoalShots / samples > 12, "the match feed should contain regular chances");
+});
+
+test("every opponent shot becomes an additional goalkeeper action while the player is on the pitch", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { advanceMatch, continueAfterAction, createMatch, submitAction } = await gameModule("/game/match-engine.ts");
+  const world = createWorld(771);
+  const club = world.clubs["PL-3-01"];
+  const opponent = world.clubs["PL-3-02"];
+  const attrs = { technika: 58, strzal: 30, podania: 62, drybling: 40, odbior: 45, szybkosc: 50, sila: 56, kondycja: 61, refleks: 70 };
+  let liveShots = 0;
+  let teamGoals = 0;
+  for (let seed = 1; seed <= 40; seed += 1) {
+    const created = createMatch({ playerName: "Test", playerNumber: 1, position: "Bramkarz", attrs, playerOvr: 64, energy: 78, morale: 70, managerTrust: 80, teamStrength: club.strength, playerClub: club, opponent, forcedRole: "starter" }, seed);
+    let match = { ...created, opportunities: [], opportunityIndex: 0, currentOpportunity: null };
+    let guard = 0;
+    while (match.phase !== "finished" && guard < 400) {
+      if (match.phase === "opportunity") {
+        assert.match(match.currentOpportunity.id, /^gk-shot-/, "an opponent shot must create a live goalkeeper opportunity");
+        liveShots += 1;
+        match = submitAction(match, match.currentOpportunity.id, 90);
+      } else if (match.phase === "resolved") {
+        match = continueAfterAction(match);
+      } else {
+        const opponentGoalsBefore = match.scoreAway;
+        match = advanceMatch(match, 1);
+        assert.equal(match.scoreAway, opponentGoalsBefore, "the ambient simulation cannot score against an active player goalkeeper");
+      }
+      guard += 1;
+    }
+    assert.equal(match.phase, "finished");
+    assert.ok(match.events.filter((item) => item.type === "goal" && item.side === "away").every((item) => item.id.startsWith("interactive-gk-shot-")));
+    teamGoals += match.scoreHome;
+  }
+  assert.ok(liveShots > 40, "goalkeeper careers should receive extra actions generated from live shots");
+  assert.ok(teamGoals > 0, "the goalkeeper's teammates must still be able to score in the ambient simulation");
+});
+
+test("a successful goalkeeper restart progresses play without inventing an assist or goal", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { createMatch, submitAction } = await gameModule("/game/match-engine.ts");
+  const world = createWorld(772);
+  const club = world.clubs["PL-3-01"];
+  const opponent = world.clubs["PL-3-02"];
+  const attrs = { technika: 70, strzal: 30, podania: 80, drybling: 40, odbior: 45, szybkosc: 50, sila: 56, kondycja: 70, refleks: 72 };
+  let match;
+  let restart;
+  for (let seed = 1; seed <= 500 && !restart; seed += 1) {
+    match = createMatch({ playerName: "Test", playerNumber: 1, position: "Bramkarz", attrs, playerOvr: 70, energy: 90, morale: 85, managerTrust: 90, teamStrength: club.strength, playerClub: club, opponent, forcedRole: "starter" }, (seed * 2654435761) >>> 0);
+    restart = match.opportunities.find((item) => item.actionType === "wznowienie");
+  }
+  assert.ok(restart, "expected a goalkeeper restart opportunity");
+  const ready = { ...match, phase: "opportunity", currentOpportunity: restart };
+  let resolved;
+  for (let rngState = 1; rngState <= 500 && !resolved?.resolved.success; rngState += 1) resolved = submitAction({ ...ready, rngState }, restart.id, 100);
+  assert.equal(resolved.resolved.success, true);
+  assert.equal(resolved.stats.assists, 0);
+  assert.equal(resolved.scoreHome, ready.scoreHome);
+  assert.equal(resolved.scoreAway, ready.scoreAway);
 });
 
 test("quality strongly changes probability but never reaches certainty", async () => {

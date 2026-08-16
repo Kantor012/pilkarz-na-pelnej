@@ -34,7 +34,7 @@ const OPPORTUNITY_LIBRARY: Record<Position, OpportunityTemplate[]> = {
     { title: "Strzał spod lady", flavor: "Napastnik wyskoczył sam. Ktoś z obrony właśnie udaje, że wiąże but.", prompt: "Wyczuj kierunek i moment parady", actionType: "parada", kind: "timing", skill: "refleks", effect: "save", failConcedes: true },
     { title: "Sam na sam i samotność", flavor: "Skróć kąt, nie godność.", prompt: "Wyczuj kierunek i moment wyjścia", actionType: "wyjście do piłki", kind: "timing", skill: "technika", effect: "save", failConcedes: true },
     { title: "Karny po konsultacji z bufetem", flavor: "Strzelec patrzy w róg trochę zbyt demonstracyjnie.", prompt: "Odczytaj kierunek i zatrzymaj moment parady", actionType: "rzut karny", kind: "timing", skill: "refleks", effect: "save", failConcedes: true },
-    { title: "Wznowienie z ambicją", flavor: "Jedno podanie może uruchomić kontrę albo dział reklamacji.", prompt: "Ustaw tempo, kierunek i siłę wznowienia", actionType: "wznowienie", kind: "timing", skill: "podania", effect: "assist", failConcedes: false },
+    { title: "Wznowienie z ambicją", flavor: "Jedno podanie może uruchomić kontrę albo dział reklamacji.", prompt: "Ustaw tempo, kierunek i siłę wznowienia", actionType: "wznowienie", kind: "timing", skill: "podania", effect: "progression", failConcedes: false },
     { title: "Bomba pod poprzeczkę", flavor: "Piłka leci tam, gdzie rękawice mają najdalej.", prompt: "Zatrzymaj znacznik w strefie parady", actionType: "parada", kind: "timing", skill: "refleks", effect: "save", failConcedes: true },
   ],
   Obrońca: [
@@ -196,6 +196,35 @@ function event(id: string, minute: number, type: MatchEvent["type"], side: Match
 const SHOT_CHANCE_BY_ZONE = [0.045, 0.075, 0.14, 0.24, 0.38];
 const SHOT_CONVERSION_BY_ZONE = [0.03, 0.048, 0.083, 0.135, 0.22];
 
+function playerGoalkeeperDefends(state: MatchSimulationState, possession: "home" | "away", minute: number) {
+  return state.playerPosition === "Bramkarz"
+    && state.playerRole !== "out"
+    && possession !== state.playerSide
+    && minute >= state.playerStartMinute
+    && minute <= state.playerEndMinute;
+}
+
+function liveGoalkeeperOpportunity(state: MatchSimulationState, minute: number, pressure: number, targetY: number): InteractiveOpportunity {
+  const highPressure = pressure > 0.72;
+  return {
+    id: `gk-shot-${minute}-${state.rngState}`,
+    minute,
+    title: highPressure ? "Sam na sam — teraz Ty" : "Strzał rywala — broń!",
+    flavor: highPressure
+      ? "Obrona została z tyłu. Zostałeś Ty, napastnik i bardzo długa sekunda."
+      : "Piłka zmierza w bramkę. Ten strzał nie zostanie rozstrzygnięty za Twoimi plecami.",
+    prompt: "Wyczuj kierunek i moment parady",
+    actionType: "parada",
+    kind: "timing",
+    skill: "refleks",
+    pressure,
+    opponentOvr: state.opponent.strength - 3 + pressure * 6,
+    successEffect: "save",
+    failConcedes: true,
+    target: { x: state.playerSide === "home" ? 7 : 93, y: targetY },
+  };
+}
+
 function simulateMinute(state: MatchSimulationState, minute: number) {
   let rngState = state.rngState;
   let possession = state.possession;
@@ -218,6 +247,28 @@ function simulateMinute(state: MatchSimulationState, minute: number) {
   const shotRoll = nextRandom(rngState); rngState = shotRoll.state;
   const shotChance = clamp(SHOT_CHANCE_BY_ZONE[zone] + strengthEdge * 0.0012, 0.025, 0.52);
   if (shotRoll.value < shotChance) {
+    if (playerGoalkeeperDefends(state, possession, minute)) {
+      const pressureRoll = nextRandom(rngState); rngState = pressureRoll.state;
+      const targetRoll = nextRandom(rngState); rngState = targetRoll.state;
+      const opportunity = liveGoalkeeperOpportunity({ ...state, rngState }, minute, 0.32 + pressureRoll.value * 0.66, 8 + targetRoll.value * 48);
+      const opportunities = [...state.opportunities];
+      opportunities.splice(state.opportunityIndex, 0, opportunity);
+      events.unshift(event(`shot-${minute}-${rngState}`, minute, "shot", possession, `${minute}′ Strzał rywala! Mecz czeka na Twoją paradę.`));
+      const pending = {
+        ...state,
+        rngState,
+        minute,
+        possession,
+        zone,
+        scoreHome,
+        scoreAway,
+        events: events.slice(0, 80),
+        opportunities,
+        phase: "opportunity" as const,
+        currentOpportunity: opportunity,
+      };
+      return { ...pending, ...spatialSnapshot(pending, minute, opportunity) };
+    }
     const goalRoll = nextRandom(rngState); rngState = goalRoll.state;
     const conversionChance = clamp(SHOT_CONVERSION_BY_ZONE[zone] + strengthEdge * 0.002, 0.015, 0.34);
     if (goalRoll.value < conversionChance) {
@@ -300,6 +351,7 @@ export function advanceMatch(state: MatchSimulationState, deltaMinutes = 1): Mat
     if (next.playerRole === "starter" && next.playerEndMinute < 90 && newMinute === next.playerEndMinute) {
       next = { ...next, events: [event(`sub-off-${next.seed}`, newMinute, "substitution", next.playerSide, `${newMinute}′ Zmiana. Schodzisz z boiska, ławka udaje, że ma dla ciebie miejsce.`), ...next.events].slice(0, 80) };
     }
+    if (next.phase === "opportunity") break;
     if (upcoming && newMinute >= upcoming.minute - 3) {
       next = { ...next, phase: "warning", currentOpportunity: upcoming, ...spatialSnapshot(next, newMinute, upcoming) };
     } else if (next.phase === "warning") {
