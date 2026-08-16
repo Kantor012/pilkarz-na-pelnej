@@ -204,27 +204,6 @@ function playerGoalkeeperDefends(state: MatchSimulationState, possession: "home"
     && minute <= state.playerEndMinute;
 }
 
-function liveGoalkeeperOpportunity(state: MatchSimulationState, minute: number, pressure: number, targetY: number): InteractiveOpportunity {
-  const highPressure = pressure > 0.72;
-  return {
-    id: `gk-shot-${minute}-${state.rngState}`,
-    minute,
-    title: highPressure ? "Sam na sam — teraz Ty" : "Strzał rywala — broń!",
-    flavor: highPressure
-      ? "Obrona została z tyłu. Zostałeś Ty, napastnik i bardzo długa sekunda."
-      : "Piłka zmierza w bramkę. Ten strzał nie zostanie rozstrzygnięty za Twoimi plecami.",
-    prompt: "Wyczuj kierunek i moment parady",
-    actionType: "parada",
-    kind: "timing",
-    skill: "refleks",
-    pressure,
-    opponentOvr: state.opponent.strength - 3 + pressure * 6,
-    successEffect: "save",
-    failConcedes: true,
-    target: { x: state.playerSide === "home" ? 7 : 93, y: targetY },
-  };
-}
-
 function simulateMinute(state: MatchSimulationState, minute: number) {
   let rngState = state.rngState;
   let possession = state.possession;
@@ -247,37 +226,18 @@ function simulateMinute(state: MatchSimulationState, minute: number) {
   const shotRoll = nextRandom(rngState); rngState = shotRoll.state;
   const shotChance = clamp(SHOT_CHANCE_BY_ZONE[zone] + strengthEdge * 0.0012, 0.025, 0.52);
   if (shotRoll.value < shotChance) {
-    if (playerGoalkeeperDefends(state, possession, minute)) {
-      const pressureRoll = nextRandom(rngState); rngState = pressureRoll.state;
-      const targetRoll = nextRandom(rngState); rngState = targetRoll.state;
-      const opportunity = liveGoalkeeperOpportunity({ ...state, rngState }, minute, 0.32 + pressureRoll.value * 0.66, 8 + targetRoll.value * 48);
-      const opportunities = [...state.opportunities];
-      opportunities.splice(state.opportunityIndex, 0, opportunity);
-      events.unshift(event(`shot-${minute}-${rngState}`, minute, "shot", possession, `${minute}′ Strzał rywala! Mecz czeka na Twoją paradę.`));
-      const pending = {
-        ...state,
-        rngState,
-        minute,
-        possession,
-        zone,
-        scoreHome,
-        scoreAway,
-        events: events.slice(0, 80),
-        opportunities,
-        phase: "opportunity" as const,
-        currentOpportunity: opportunity,
-      };
-      return { ...pending, ...spatialSnapshot(pending, minute, opportunity) };
-    }
     const goalRoll = nextRandom(rngState); rngState = goalRoll.state;
     const conversionChance = clamp(SHOT_CONVERSION_BY_ZONE[zone] + strengthEdge * 0.002, 0.015, 0.34);
-    if (goalRoll.value < conversionChance) {
+    const protectedByPlayerGoalkeeper = playerGoalkeeperDefends(state, possession, minute);
+    if (goalRoll.value < conversionChance && !protectedByPlayerGoalkeeper) {
       if (possession === "home") scoreHome += 1; else scoreAway += 1;
       events.unshift(event(`goal-${minute}-${rngState}`, minute, "goal", possession, `${minute}′ GOL! ${possession === "home" ? state.playerClub.name : state.opponent.name} kończy akcję bez pytania cię o zgodę.`));
       possession = possession === "home" ? "away" : "home";
       zone = 2;
     } else if (events.length < 80) {
-      const missText = goalRoll.value < conversionChance + 0.28
+      const missText = protectedByPlayerGoalkeeper && goalRoll.value < conversionChance
+        ? "Bronisz bez problemu — to nie była sytuacja wymagająca minigry."
+        : goalRoll.value < conversionChance + 0.28
         ? "Bramkarz odbija piłkę i pretensje obrony."
         : goalRoll.value < conversionChance + 0.58
           ? "Obrońca blokuje strzał częścią ciała, której nie zgłaszał do ubezpieczenia."
@@ -330,6 +290,35 @@ export function createMatch(input: CreateMatchInput, seed: number): MatchSimulat
     events: [event(`kickoff-${seed}`, 0, "kickoff", "neutral", "1′ Sędzia sprawdził zegarek. Działa. Gramy!")],
   };
   return { ...base, ...spatialSnapshot(base, 0) };
+}
+
+export function repairSavedGoalkeeperMatch(state: MatchSimulationState | null): MatchSimulationState | null {
+  if (!state || state.playerPosition !== "Bramkarz" || state.playerRole === "out") return state;
+  const invalidAmbientGoals = state.events.filter((item) => item.type === "goal"
+    && item.side !== state.playerSide
+    && item.side !== "neutral"
+    && item.id.startsWith("goal-")
+    && item.minute >= state.playerStartMinute
+    && item.minute <= state.playerEndMinute);
+  const isGeneratedShot = (opportunity: InteractiveOpportunity) => opportunity.id.startsWith("gk-shot-");
+  const generatedBeforeIndex = state.opportunities.slice(0, state.opportunityIndex).filter(isGeneratedShot).length;
+  const cleanedOpportunities = state.opportunities.filter((item) => !isGeneratedShot(item));
+  const generatedCurrent = Boolean(state.currentOpportunity && isGeneratedShot(state.currentOpportunity));
+  const generatedResolution = Boolean(state.resolved?.opportunityId.startsWith("gk-shot-"));
+  if (!invalidAmbientGoals.length && cleanedOpportunities.length === state.opportunities.length) return state;
+  const invalidIds = new Set(invalidAmbientGoals.map((item) => item.id));
+  const repaired = {
+    ...state,
+    scoreHome: state.playerSide === "away" ? Math.max(0, state.scoreHome - invalidAmbientGoals.length) : state.scoreHome,
+    scoreAway: state.playerSide === "home" ? Math.max(0, state.scoreAway - invalidAmbientGoals.length) : state.scoreAway,
+    events: state.events.filter((item) => !invalidIds.has(item.id)),
+    opportunities: cleanedOpportunities,
+    opportunityIndex: Math.max(0, state.opportunityIndex - generatedBeforeIndex),
+    phase: generatedCurrent || generatedResolution ? "running" as const : state.phase,
+    currentOpportunity: generatedCurrent || generatedResolution ? null : state.currentOpportunity,
+    resolved: generatedCurrent || generatedResolution ? null : state.resolved,
+  };
+  return generatedCurrent || generatedResolution ? { ...repaired, ...spatialSnapshot(repaired, repaired.minute) } : repaired;
 }
 
 export function advanceMatch(state: MatchSimulationState, deltaMinutes = 1): MatchSimulationState {

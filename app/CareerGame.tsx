@@ -14,7 +14,7 @@ import { SaveRepository } from "../game/save-repository";
 import { CloudSaveRepository } from "../game/cloud-save";
 import {
   advanceMatch, continueAfterAction, createMatch, opportunityChanceRange, roleLabel,
-  setMatchSpeed, submitAction,
+  repairSavedGoalkeeperMatch, setMatchSpeed, submitAction,
 } from "../game/match-engine";
 import {
   createWorld, currentFixtureForClub, findClubByName, recordFixtureResult,
@@ -120,7 +120,7 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
       if (!alive) return;
       if (save?.version === 3) {
         const savedCareer = save.career;
-        setSeed(save.seed); setCareer({ ...savedCareer, squad: savedCareer.squad ?? createClubSquad(save.world, savedCareer.clubId), availability: savedCareer.availability ?? DEFAULT_AVAILABILITY, development: normalizeDevelopmentState(savedCareer.development), market: savedCareer.market ?? createMarketState(savedCareer.clubId, savedCareer.season, calculateOvr(savedCareer.player.position, savedCareer.player.attrs), save.seed), competitions: savedCareer.competitions ?? createCompetitions(save.world, savedCareer.nationality, calculateOvr(savedCareer.player.position, savedCareer.player.attrs)), meta: savedCareer.meta ?? defaultMetaGame() }); setWorld(save.world); setMatch(save.activeMatch);
+        setSeed(save.seed); setCareer({ ...savedCareer, squad: savedCareer.squad ?? createClubSquad(save.world, savedCareer.clubId), availability: savedCareer.availability ?? DEFAULT_AVAILABILITY, development: normalizeDevelopmentState(savedCareer.development), market: savedCareer.market ?? createMarketState(savedCareer.clubId, savedCareer.season, calculateOvr(savedCareer.player.position, savedCareer.player.attrs), save.seed), competitions: savedCareer.competitions ?? createCompetitions(save.world, savedCareer.nationality, calculateOvr(savedCareer.player.position, savedCareer.player.attrs)), meta: savedCareer.meta ?? defaultMetaGame() }); setWorld(save.world); setMatch(repairSavedGoalkeeperMatch(save.activeMatch));
       } else {
         const legacyText = window.localStorage.getItem("pilkarz-na-pelnej-save-v2");
         if (legacyText) {
@@ -201,7 +201,7 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
     try {
       const result = await CloudSaveRepository.download<Career>();
       if (!result.save) { setCloudStatus("Brak zapisu w chmurze."); return; }
-      setSeed(result.save.seed); setCareer(result.save.career); setWorld(result.save.world); setMatch(result.save.activeMatch); setCloudStatus("Zapis pobrany z chmury.");
+      setSeed(result.save.seed); setCareer(result.save.career); setWorld(result.save.world); setMatch(repairSavedGoalkeeperMatch(result.save.activeMatch)); setCloudStatus("Zapis pobrany z chmury.");
     } catch (error) { setCloudStatus(error instanceof Error ? error.message : "Chmura jest niedostępna."); }
   };
 

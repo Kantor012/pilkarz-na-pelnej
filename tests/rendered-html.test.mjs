@@ -136,39 +136,80 @@ test("ambient match simulation creates goals and chances for both teams", async 
   assert.ok(nonGoalShots / samples > 12, "the match feed should contain regular chances");
 });
 
-test("every opponent shot becomes an additional goalkeeper action while the player is on the pitch", async () => {
+test("ambient opponent shots are blocked without creating extra goalkeeper actions", async () => {
   const { createWorld } = await gameModule("/game/world.ts");
-  const { advanceMatch, continueAfterAction, createMatch, submitAction } = await gameModule("/game/match-engine.ts");
+  const { advanceMatch, createMatch } = await gameModule("/game/match-engine.ts");
   const world = createWorld(771);
   const club = world.clubs["PL-3-01"];
   const opponent = world.clubs["PL-3-02"];
   const attrs = { technika: 58, strzal: 30, podania: 62, drybling: 40, odbior: 45, szybkosc: 50, sila: 56, kondycja: 61, refleks: 70 };
-  let liveShots = 0;
+  let ambientShots = 0;
   let teamGoals = 0;
   for (let seed = 1; seed <= 40; seed += 1) {
     const created = createMatch({ playerName: "Test", playerNumber: 1, position: "Bramkarz", attrs, playerOvr: 64, energy: 78, morale: 70, managerTrust: 80, teamStrength: club.strength, playerClub: club, opponent, forcedRole: "starter" }, seed);
-    let match = { ...created, opportunities: [], opportunityIndex: 0, currentOpportunity: null };
-    let guard = 0;
-    while (match.phase !== "finished" && guard < 400) {
-      if (match.phase === "opportunity") {
-        assert.match(match.currentOpportunity.id, /^gk-shot-/, "an opponent shot must create a live goalkeeper opportunity");
-        liveShots += 1;
-        match = submitAction(match, match.currentOpportunity.id, 90);
-      } else if (match.phase === "resolved") {
-        match = continueAfterAction(match);
-      } else {
-        const opponentGoalsBefore = match.scoreAway;
-        match = advanceMatch(match, 1);
-        assert.equal(match.scoreAway, opponentGoalsBefore, "the ambient simulation cannot score against an active player goalkeeper");
-      }
-      guard += 1;
-    }
+    const match = advanceMatch({ ...created, opportunities: [], opportunityIndex: 0, currentOpportunity: null }, 90);
     assert.equal(match.phase, "finished");
-    assert.ok(match.events.filter((item) => item.type === "goal" && item.side === "away").every((item) => item.id.startsWith("interactive-gk-shot-")));
+    assert.equal(match.scoreAway, 0, "ambient shots cannot score against the player goalkeeper");
+    assert.equal(match.opportunities.length, 0, "ambient shots must not add extra minigames");
+    ambientShots += match.events.filter((item) => item.type === "shot" && item.side === "away").length;
     teamGoals += match.scoreHome;
   }
-  assert.ok(liveShots > 40, "goalkeeper careers should receive extra actions generated from live shots");
+  assert.ok(ambientShots > 40, "opponents should still take shots in the ambient simulation");
   assert.ok(teamGoals > 0, "the goalkeeper's teammates must still be able to score in the ambient simulation");
+});
+
+test("a goalkeeper cannot concede before the first interactive action", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { advanceMatch, createMatch } = await gameModule("/game/match-engine.ts");
+  const world = createWorld(773);
+  const club = world.clubs["PL-3-01"];
+  const opponent = world.clubs["PL-3-02"];
+  const attrs = { technika: 58, strzal: 30, podania: 62, drybling: 40, odbior: 45, szybkosc: 50, sila: 56, kondycja: 61, refleks: 70 };
+  for (let sample = 1; sample <= 200; sample += 1) {
+    let match = createMatch({ playerName: "Test", playerNumber: 1, position: "Bramkarz", attrs, playerOvr: 64, energy: 78, morale: 70, managerTrust: 80, teamStrength: club.strength, playerClub: club, opponent, forcedRole: "starter" }, (sample * 2654435761) >>> 0);
+    let guard = 0;
+    while (match.phase !== "opportunity" && match.phase !== "finished" && guard < 100) {
+      match = advanceMatch(match, 1);
+      assert.equal(match.scoreAway, 0, `seed ${sample} conceded before the first goalkeeper action`);
+      guard += 1;
+    }
+  }
+});
+
+test("loading an old goalkeeper match removes only hidden opponent goals", async () => {
+  const { createWorld } = await gameModule("/game/world.ts");
+  const { createMatch, repairSavedGoalkeeperMatch } = await gameModule("/game/match-engine.ts");
+  const world = createWorld(774);
+  const club = world.clubs["PL-3-01"];
+  const opponent = world.clubs["PL-3-02"];
+  const attrs = { technika: 58, strzal: 30, podania: 62, drybling: 40, odbior: 45, szybkosc: 50, sila: 56, kondycja: 61, refleks: 70 };
+  const created = createMatch({ playerName: "Test", playerNumber: 1, position: "Bramkarz", attrs, playerOvr: 64, energy: 78, morale: 70, managerTrust: 80, teamStrength: club.strength, playerClub: club, opponent, forcedRole: "starter" }, 774);
+  const generatedShot = { ...(created.opportunities[0] ?? { minute: 50, title: "old", flavor: "old", prompt: "old", actionType: "parada", kind: "timing", skill: "refleks", pressure: .5, opponentOvr: 60, successEffect: "save", failConcedes: true, target: { x: 7, y: 32 } }), id: "gk-shot-50-old", minute: 50 };
+  const oldSave = {
+    ...created,
+    minute: 50,
+    scoreHome: 1,
+    scoreAway: 2,
+    phase: "opportunity",
+    opportunities: [generatedShot, ...created.opportunities],
+    opportunityIndex: 0,
+    currentOpportunity: generatedShot,
+    events: [
+      { id: "goal-22-old", minute: 22, type: "goal", side: "away", text: "hidden" },
+      { id: "interactive-gk-shot-41-old", minute: 41, type: "goal", side: "away", text: "failed minigame" },
+      { id: "goal-10-team", minute: 10, type: "goal", side: "home", text: "team goal" },
+      ...created.events,
+    ],
+  };
+  const repaired = repairSavedGoalkeeperMatch(oldSave);
+  assert.equal(repaired.scoreHome, 1);
+  assert.equal(repaired.scoreAway, 1);
+  assert.equal(repaired.events.some((item) => item.id === "goal-22-old"), false);
+  assert.equal(repaired.events.some((item) => item.id === "interactive-gk-shot-41-old"), true);
+  assert.equal(repaired.events.some((item) => item.id === "goal-10-team"), true);
+  assert.equal(repaired.opportunities.some((item) => item.id.startsWith("gk-shot-")), false);
+  assert.equal(repaired.currentOpportunity, null);
+  assert.equal(repaired.phase, "running");
 });
 
 test("a successful goalkeeper restart progresses play without inventing an assist or goal", async () => {
