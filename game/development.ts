@@ -39,9 +39,9 @@ export interface DevelopmentState {
 
 export const DEVELOPMENT_SUPPORT: Record<DevelopmentSupportId, { label: string; copy: string; baseCost: number; salaryShare: number; recovery: number; learning: number; stability: number }> = {
   club: { label: "Zaplecze klubowe", copy: "W cenie kontraktu. Fizjo ma kolejkę, ale zna twoje kolano.", baseCost: 0, salaryShare: 0, recovery: 5, learning: 1, stability: 0 },
-  analysis: { label: "Analiza indywidualna", copy: "Nagrania, dane i mniej zgadywania. Podnosi szansę trafionej adaptacji.", baseCost: 200, salaryShare: .15, recovery: 7, learning: 1.07, stability: .04 },
-  personal: { label: "Trener + fizjoterapeuta", copy: "Plan pod ciebie, nie pod 24 chłopa i pachołek bez powietrza.", baseCost: 750, salaryShare: .45, recovery: 10, learning: 1.14, stability: .09 },
-  elite: { label: "Sztab premium", copy: "Diagnostyka, odnowa i człowiek, który zabiera telefon przed snem.", baseCost: 1800, salaryShare: .95, recovery: 14, learning: 1.22, stability: .14 },
+  analysis: { label: "Analiza indywidualna", copy: "Nagrania, dane i mniej zgadywania. Podnosi szansę trafionej adaptacji.", baseCost: 200, salaryShare: .25, recovery: 7, learning: 1.07, stability: .04 },
+  personal: { label: "Trener + fizjoterapeuta", copy: "Plan pod ciebie, nie pod 24 chłopa i pachołek bez powietrza.", baseCost: 750, salaryShare: .6, recovery: 10, learning: 1.14, stability: .09 },
+  elite: { label: "Sztab premium", copy: "Diagnostyka, odnowa i człowiek, który zabiera telefon przed snem.", baseCost: 1800, salaryShare: 1.25, recovery: 14, learning: 1.22, stability: .14 },
 };
 
 export function developmentSupportCost(id: DevelopmentSupportId, weeklySalary: number) {
@@ -148,8 +148,9 @@ export function previewMicrocycle(input: { state: DevelopmentState; trainings: T
   });
   const support = DEVELOPMENT_SUPPORT[state.plan.support];
   const trainingEnergy = forecasts.reduce((sum, item) => sum + Math.min(0, item.energy), 0);
-  // Trening nie jest perpetuum mobile: po każdej jednostce tydzień zawsze kończy się deficytem energii.
-  const energyDelta = forecasts.length ? Math.min(-2, trainingEnergy + support.recovery) : 0;
+  // Jedna jednostka może zostać w pełni pokryta regeneracją. Pełny układ dwóch bodźców zawsze kosztuje energię.
+  const recoveredEnergy = trainingEnergy + support.recovery;
+  const energyDelta = forecasts.length >= 2 ? Math.min(-2, recoveredEnergy) : forecasts.length === 1 ? recoveredEnergy : 0;
   const range = forecasts.reduce(([low, high], item) => [low + item.range[0], high + item.range[1]], [0, 0]);
   const load = Math.min(100, Math.abs(trainingEnergy) * 2.1 + INTENSITY[state.plan.intensity].load + state.strain * .25 - support.recovery * .7);
   const injuryRisk = Math.round(Math.max(1, Math.min(32, 2 + load * .16 + state.strain * .11 - support.stability * 35)));

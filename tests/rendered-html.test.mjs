@@ -264,6 +264,10 @@ test("development workshop is uncertain, funded and always costs energy", async 
       assert.ok(preview.energyDelta < 0, `${intensity}/${support} must end with negative energy`);
     }
   }
+  const singleLight = setDevelopmentSupport(setDevelopmentIntensity(selectMicrocycleSession(emptyDevelopmentState(),"ball",false),"lekki"),"elite");
+  const singlePreview = previewMicrocycle({ state:singleLight, trainings, age:19, positionWeight:weights, weeklySalary:6000 });
+  assert.equal(singlePreview.energyDelta, Math.round(ball.energy * .72) + DEVELOPMENT_SUPPORT.elite.recovery,"one light session must receive the full advertised recovery");
+  assert.ok(singlePreview.energyDelta > 0);
   const attrs = { technika: 60, strzal: 60, podania: 60, drybling: 60, odbior: 60, szybkosc: 60, sila: 60, kondycja: 60, refleks: 60 };
   const input = { state: { ...state, recentSessions: Array(6).fill("finish") }, trainings, attrs, age: 19, potential: 90, positionWeight: weights, professionalism: 70, facilities: 1, seed: 5544, funds: 10000, weeklySalary:6000 };
   const result = applyMicrocycle(input);
@@ -276,7 +280,9 @@ test("development workshop is uncertain, funded and always costs energy", async 
   const noMoney = applyMicrocycle({ ...input, funds: 0 });
   assert.equal(noMoney.moneyCost, 0);
   assert.ok(developmentSupportCost("elite",10000) > developmentSupportCost("elite",3000),"support prices must scale with the contract");
-  assert.ok(developmentSupportCost("elite",6000) >= 6000 * .95,"premium staff should consume roughly a weekly salary");
+  assert.equal(developmentSupportCost("analysis",6000),1500);
+  assert.equal(developmentSupportCost("personal",6000),3600);
+  assert.equal(developmentSupportCost("elite",6000),7500,"premium staff should cost 125% of a weekly salary");
   const restedWithClub = settleWeeklyRecovery({ state: setDevelopmentSupport(state,"club"), trainingDone:false, appeared:false, role:"out", funds:10000, weeklySalary:6000 });
   const restedWithPremium = settleWeeklyRecovery({ state, trainingDone:false, appeared:false, role:"out", funds:10000, weeklySalary:6000 });
   assert.ok(restedWithClub.energyDelta > 0, "a player outside the match must recover energy");
