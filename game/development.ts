@@ -148,9 +148,8 @@ export function previewMicrocycle(input: { state: DevelopmentState; trainings: T
   });
   const support = DEVELOPMENT_SUPPORT[state.plan.support];
   const trainingEnergy = forecasts.reduce((sum, item) => sum + Math.min(0, item.energy), 0);
-  // Jedna jednostka może zostać w pełni pokryta regeneracją. Pełny układ dwóch bodźców zawsze kosztuje energię.
-  const recoveredEnergy = trainingEnergy + support.recovery;
-  const energyDelta = forecasts.length >= 2 ? Math.min(-2, recoveredEnergy) : forecasts.length === 1 ? recoveredEnergy : 0;
+  // Bilans to dokładna suma kosztu wszystkich jednostek i pełnej regeneracji wybranego sztabu.
+  const energyDelta = forecasts.length > 0 ? trainingEnergy + support.recovery : 0;
   const range = forecasts.reduce(([low, high], item) => [low + item.range[0], high + item.range[1]], [0, 0]);
   const load = Math.min(100, Math.abs(trainingEnergy) * 2.1 + INTENSITY[state.plan.intensity].load + state.strain * .25 - support.recovery * .7);
   const injuryRisk = Math.round(Math.max(1, Math.min(32, 2 + load * .16 + state.strain * .11 - support.stability * 35)));

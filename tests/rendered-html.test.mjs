@@ -241,7 +241,7 @@ test("coach builds a deterministic squad and explains lineup hierarchy", async (
   assert.ok(star.competitors.length > 0);
 });
 
-test("development workshop is uncertain, funded and always costs energy", async () => {
+test("development workshop is uncertain, funded and uses exact energy arithmetic", async () => {
   const { DEVELOPMENT_SUPPORT, developmentSupportCost, emptyDevelopmentState, selectMicrocycleSession, setDevelopmentIntensity, setDevelopmentSupport, forecastSession, previewMicrocycle, applyMicrocycle, settleWeeklyRecovery, applySeasonAging } = await gameModule("/game/development.ts");
   const finish = { id: "finish", attrs: { strzal: 1, technika: .3 }, energy: -12 };
   const ball = { id: "ball", attrs: { technika: .8, drybling: .5 }, energy: -8 };
@@ -261,7 +261,9 @@ test("development workshop is uncertain, funded and always costs energy", async 
     for (const support of Object.keys(DEVELOPMENT_SUPPORT)) {
       const plan = setDevelopmentSupport(setDevelopmentIntensity(state, intensity), support);
       const preview = previewMicrocycle({ state: plan, trainings, age: 19, positionWeight: weights, weeklySalary:6000 });
-      assert.ok(preview.energyDelta < 0, `${intensity}/${support} must end with negative energy`);
+      const mainEnergy = forecastSession(plan, finish, 19, weights, "main").energy;
+      const supplementaryEnergy = forecastSession(plan, ball, 19, weights, "supplementary").energy;
+      assert.equal(preview.energyDelta, mainEnergy + supplementaryEnergy + DEVELOPMENT_SUPPORT[support].recovery, `${intensity}/${support} must use exact training and recovery values`);
     }
   }
   const singleLight = setDevelopmentSupport(setDevelopmentIntensity(selectMicrocycleSession(emptyDevelopmentState(),"ball",false),"lekki"),"elite");

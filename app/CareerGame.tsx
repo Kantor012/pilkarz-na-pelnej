@@ -396,7 +396,7 @@ export default function CareerGame({ cloudEnabled = true }: { cloudEnabled?: boo
           <section className="v3-development-status">
             <article><small>REAKCJA ORGANIZMU</small><strong>{development.strain < 25 ? "ŚWIEŻY" : development.strain < 55 ? "OBCIĄŻONY" : "NA GRANICY"}</strong><span>zmęczenie ukryte {Math.round(development.strain)}%</span></article>
             <article><small>PROGNOZA ROZWOJU</small><strong>{developmentPreview.sessions ? `${developmentPreview.range[0].toFixed(2)}–${developmentPreview.range[1].toFixed(2)} OVR` : "WYBIERZ BODŹCE"}</strong><span>to przedział, nie obietnica</span></article>
-            <article><small>BILANS TYGODNIA</small><strong className={developmentPreview.energyDelta < 0 ? "negative" : ""}>{developmentPreview.energyDelta} energii</strong><span>pełny plan nigdy nie daje energii</span></article>
+            <article><small>BILANS TYGODNIA</small><strong className={developmentPreview.energyDelta < 0 ? "negative" : ""}>{developmentPreview.energyDelta > 0 ? "+" : ""}{developmentPreview.energyDelta} energii</strong><span>koszt jednostek + regeneracja sztabu</span></article>
             <article><small>BUDŻET ROZWOJU</small><strong>{developmentPreview.moneyCost} zł</strong><span>konto: {career.money} zł</span></article>
           </section>
 
