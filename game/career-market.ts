@@ -109,6 +109,19 @@ export function settleCareerWeek(market: MarketState, input: { season: number; w
   return { ...market, reputation: clamp(market.reputation + (input.rating - 6) * .9 + input.goals * 1.4 + (input.won ? .5 : 0)), relations: { coach: clamp(market.relations.coach + (input.rating - 6) * 1.2), teammates: clamp(market.relations.teammates + (input.rating - 6) * .7), fans: clamp(market.relations.fans + input.goals * 2 + (input.won ? 1 : -.4)), media: clamp(market.relations.media + input.goals * 1.3), agent: market.relations.agent }, ledger: [{ id: `week-${input.season}-${input.week}`, season: input.season, week: input.week, amountEur, label: `Pensja i premie (prowizja ${commission} €)` }, ...market.ledger].slice(0, 100) };
 }
 
+export function settleOffseasonWeek(market: MarketState, season: number, offseasonWeek: number) {
+  const sponsor = market.sponsors.reduce((sum, item) => sum + item.weeklyEur, 0);
+  const commission = Math.round(sponsor * market.agent.commission / 100);
+  const amountEur = market.contract.weeklySalaryEur + sponsor - commission;
+  return {
+    market: {
+      ...market,
+      ledger: [{ id: `offseason-${season}-${offseasonWeek}`, season, week: 0, amountEur, label: `Tygodniówka podczas przerwy (prowizja ${commission} €)` }, ...market.ledger].slice(0, 100),
+    },
+    amountEur,
+  };
+}
+
 export function sponsorshipDecision(market: MarketState) {
   const available = SPONSORS[market.sponsors.length % SPONSORS.length];
   if (market.reputation < 45 + market.sponsors.length * 10 || market.sponsors.some((item) => item.name === available)) return market;

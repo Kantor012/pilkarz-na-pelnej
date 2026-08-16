@@ -1,4 +1,5 @@
 import { hashSeed, nextRandom } from "./rng";
+import { DEVELOPMENT_GAIN_SCALE } from "./season-flow";
 import type { AttrKey, Attributes, Position } from "./types";
 
 export type DevelopmentIntensity = "lekki" | "normalny" | "mocny";
@@ -122,7 +123,7 @@ export function forecastSession(state: DevelopmentState, training: TrainingDefin
   const support = DEVELOPMENT_SUPPORT[current.plan.support];
   const slotFactor = slot === "main" ? 1 : slot === "supplementary" ? .64 : 0;
   const repetition = repetitionMultiplier(current.recentSessions, training.id);
-  const growth = intensity.growth * slotFactor * ageMultiplier(age) * repetition * support.learning;
+  const growth = intensity.growth * slotFactor * ageMultiplier(age) * repetition * support.learning * DEVELOPMENT_GAIN_SCALE;
   const expectedOvr = Object.entries(training.attrs).reduce((sum, [key, gain]) => sum + (gain ?? 0) * (positionWeight[key as AttrKey] ?? 0) * growth, 0);
   const uncertainty = .42 + Math.min(.18, current.strain / 260);
   const low = Math.max(0, expectedOvr * (1 - uncertainty));
@@ -149,10 +150,10 @@ export function previewMicrocycle(input: { state: DevelopmentState; trainings: T
   const support = DEVELOPMENT_SUPPORT[state.plan.support];
   const trainingEnergy = forecasts.reduce((sum, item) => sum + Math.min(0, item.energy), 0);
   // Bilans to dokładna suma kosztu wszystkich jednostek i pełnej regeneracji wybranego sztabu.
-  const energyDelta = forecasts.length > 0 ? trainingEnergy + support.recovery : 0;
+  const energyDelta = trainingEnergy + support.recovery;
   const range = forecasts.reduce(([low, high], item) => [low + item.range[0], high + item.range[1]], [0, 0]);
-  const load = Math.min(100, Math.abs(trainingEnergy) * 2.1 + INTENSITY[state.plan.intensity].load + state.strain * .25 - support.recovery * .7);
-  const injuryRisk = Math.round(Math.max(1, Math.min(32, 2 + load * .16 + state.strain * .11 - support.stability * 35)));
+  const load = forecasts.length > 0 ? Math.min(100, Math.abs(trainingEnergy) * 2.1 + INTENSITY[state.plan.intensity].load + state.strain * .25 - support.recovery * .7) : 0;
+  const injuryRisk = forecasts.length > 0 ? Math.round(Math.max(1, Math.min(32, 2 + load * .16 + state.strain * .11 - support.stability * 35))) : 0;
   return { energyDelta, range: range as [number, number], load: Math.round(load), injuryRisk, moneyCost: developmentSupportCost(state.plan.support, input.weeklySalary ?? 0), sessions: forecasts.length };
 }
 
@@ -161,10 +162,11 @@ export function settleWeeklyRecovery(input: { state: DevelopmentState; trainingD
   const requestedCost = developmentSupportCost(state.plan.support, input.weeklySalary ?? 0);
   const supportId: DevelopmentSupportId = !input.trainingDone && input.funds >= requestedCost ? state.plan.support : "club";
   const support = DEVELOPMENT_SUPPORT[supportId];
-  // Zaplecze kupione w mikrocyklu zostało już rozliczone. Bez treningu działa jako osobny pakiet odnowy.
-  const passiveRecovery = input.trainingDone ? 0 : Math.round(support.recovery * .65);
-  const activityDelta = input.appeared ? (input.role === "starter" ? -16 : -9) : 10;
-  const energyDelta = input.appeared ? Math.min(0, activityDelta + passiveRecovery) : Math.min(20, activityDelta + passiveRecovery);
+  // Zaplecze kupione w mikrocyklu zostało już rozliczone. Bez treningu przyznajemy dokładnie
+  // wartość regeneracji widoczną na karcie sztabu, bez ukrytego mnożnika i dodatkowej premii.
+  const recovery = input.trainingDone ? 0 : support.recovery;
+  const activityDelta = input.appeared ? (input.role === "starter" ? -16 : -9) : 0;
+  const energyDelta = input.appeared ? Math.min(0, activityDelta + recovery) : recovery;
   return {
     energyDelta,
     moneyCost: input.trainingDone ? 0 : developmentSupportCost(supportId, input.weeklySalary ?? 0),
@@ -195,6 +197,25 @@ export function applyMicrocycle(input: { state: DevelopmentState; trainings: Tra
   const selected = (["main", "supplementary"] as const)
     .map((slot) => ({ slot, id: effectiveState.plan[slot] }))
     .filter((item): item is { slot: "main" | "supplementary"; id: string } => Boolean(item.id));
+  if (selected.length === 0) {
+    const report: DevelopmentReport = {
+      response: "adaptation",
+      responseLabel: "PEŁNA REGENERACJA",
+      summary: "Bez bodźca treningowego. Sztab odbudował energię, a pachołki dostały wolne.",
+      attributeGains: {}, bankedProgress: 0, ovrGain: 0, energyDelta: preview.energyDelta,
+      moneyCost: developmentSupportCost(affordableSupport, input.weeklySalary ?? 0), injuryRisk: 0,
+    };
+    return {
+      attrs: { ...input.attrs }, energy: preview.energyDelta, ovrGain: 0, moneyCost: report.moneyCost, report,
+      state: {
+        plan: { main: null, supplementary: null, recovery: null, intensity: effectiveState.plan.intensity, support: effectiveState.plan.support },
+        recentSessions: effectiveState.recentSessions, traits: effectiveState.traits, weeklyLoad: 0,
+        totalSessions: effectiveState.totalSessions, adaptation: effectiveState.adaptation,
+        strain: Math.max(0, effectiveState.strain * .5 - DEVELOPMENT_SUPPORT[affordableSupport].recovery),
+        weekIndex: effectiveState.weekIndex + 1, lastReport: report,
+      } satisfies DevelopmentState,
+    };
+  }
   const attrs = { ...input.attrs };
   const adaptation = { ...effectiveState.adaptation };
   const completed: string[] = [];

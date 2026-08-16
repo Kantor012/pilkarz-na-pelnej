@@ -1218,6 +1218,8 @@ body { background:#071019; }
 .v3-next>p:not(.micro-label) { margin:10px 0; font-size:10px; line-height:1.45; }
 .v3-role-preview { margin-top:10px; padding:7px 8px; }
 .v3-next>.v3-primary { margin-top:12px; min-height:48px; }
+.v3-offseason-progress { height:8px; margin:18px 0 4px; overflow:hidden; border-radius:999px; background:#1a2a37; }
+.v3-offseason-progress i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#aefc22,#ffc241); }
 
 @media (max-width:1450px) {
   .v3-career-grid { grid-template-columns:205px minmax(540px,1fr) 225px; }

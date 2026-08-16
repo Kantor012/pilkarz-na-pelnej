@@ -3,6 +3,7 @@ import { createCompetitions, type CompetitionsState } from "./competitions";
 import { emptyDevelopmentState, type DevelopmentState } from "./development";
 import { defaultMetaGame, type MetaGameState } from "./meta-game";
 import { createClubSquad, type ClubSquadState, type PlayerAvailability } from "./squad";
+import type { OffseasonState } from "./season-flow";
 import { createWorld, findClubByName, seedForNewCareer } from "./world";
 import type { Attributes, CountryCode, Position } from "./types";
 
@@ -19,6 +20,7 @@ export interface CareerSaveV3 {
   managerTrust: number;
   money: number;
   trainingDone: boolean;
+  offseason?: OffseasonState;
   hiddenTalent: string;
   hiddenRevealed: boolean;
   trainingCount: number;

@@ -270,7 +270,17 @@ test("development workshop is uncertain, funded and uses exact energy arithmetic
   const singlePreview = previewMicrocycle({ state:singleLight, trainings, age:19, positionWeight:weights, weeklySalary:6000 });
   assert.equal(singlePreview.energyDelta, Math.round(ball.energy * .72) + DEVELOPMENT_SUPPORT.elite.recovery,"one light session must receive the full advertised recovery");
   assert.ok(singlePreview.energyDelta > 0);
+  const noTraining = setDevelopmentSupport(emptyDevelopmentState(),"elite");
+  const noTrainingPreview = previewMicrocycle({ state:noTraining, trainings, age:19, positionWeight:weights, weeklySalary:6000 });
+  assert.equal(noTrainingPreview.energyDelta, DEVELOPMENT_SUPPORT.elite.recovery,"no training must display the full advertised recovery");
+  assert.equal(noTrainingPreview.injuryRisk,0);
   const attrs = { technika: 60, strzal: 60, podania: 60, drybling: 60, odbior: 60, szybkosc: 60, sila: 60, kondycja: 60, refleks: 60 };
+  const recoveryOnly = applyMicrocycle({ state:noTraining, trainings, attrs, age:19, potential:90, positionWeight:weights, professionalism:70, facilities:1, seed:77, funds:10000, weeklySalary:6000 });
+  assert.equal(recoveryOnly.energy,DEVELOPMENT_SUPPORT.elite.recovery);
+  assert.equal(recoveryOnly.moneyCost,developmentSupportCost("elite",6000));
+  assert.equal(recoveryOnly.state.totalSessions,0);
+  assert.equal(recoveryOnly.report.responseLabel,"PEŁNA REGENERACJA");
+  assert.equal(recoveryOnly.report.injuryRisk,0);
   const input = { state: { ...state, recentSessions: Array(6).fill("finish") }, trainings, attrs, age: 19, potential: 90, positionWeight: weights, professionalism: 70, facilities: 1, seed: 5544, funds: 10000, weeklySalary:6000 };
   const result = applyMicrocycle(input);
   const replay = applyMicrocycle(input);
@@ -287,25 +297,38 @@ test("development workshop is uncertain, funded and uses exact energy arithmetic
   assert.equal(developmentSupportCost("elite",6000),7500,"premium staff should cost 125% of a weekly salary");
   const restedWithClub = settleWeeklyRecovery({ state: setDevelopmentSupport(state,"club"), trainingDone:false, appeared:false, role:"out", funds:10000, weeklySalary:6000 });
   const restedWithPremium = settleWeeklyRecovery({ state, trainingDone:false, appeared:false, role:"out", funds:10000, weeklySalary:6000 });
-  assert.ok(restedWithClub.energyDelta > 0, "a player outside the match must recover energy");
-  assert.ok(restedWithPremium.energyDelta > restedWithClub.energyDelta, "premium staff must improve a rest week");
+  assert.equal(restedWithClub.energyDelta, DEVELOPMENT_SUPPORT.club.recovery, "a rest week must use the advertised club recovery");
+  assert.equal(restedWithPremium.energyDelta, DEVELOPMENT_SUPPORT.elite.recovery, "premium staff must grant exactly the advertised recovery");
   assert.equal(restedWithPremium.moneyCost, developmentSupportCost("elite",6000));
   const premiumStarter = settleWeeklyRecovery({ state, trainingDone:false, appeared:true, role:"starter", funds:10000, weeklySalary:6000 });
   assert.ok(premiumStarter.energyDelta <= 0, "recovery must not create energy after a full match");
   const trainedAndRested = settleWeeklyRecovery({ state, trainingDone:true, appeared:false, role:"out", funds:10000, weeklySalary:6000 });
-  assert.ok(trainedAndRested.energyDelta > 0);
+  assert.equal(trainedAndRested.energyDelta,0,"recovery already included in a microcycle cannot be applied twice");
   assert.equal(trainedAndRested.moneyCost,0,"support already paid inside a completed microcycle cannot be charged twice");
   const aged = applySeasonAging(attrs, "Napastnik", 34, 90);
   assert.ok(aged.szybkosc < attrs.szybkosc);
 });
 
+test("six-week offseason adds about fifteen percent seasonal development", async () => {
+  const { advanceOffseasonWeek, beginOffseason, DEFAULT_OFFSEASON_WEEKS, DEVELOPMENT_GAIN_SCALE } = await gameModule("/game/season-flow.ts");
+  assert.equal(DEFAULT_OFFSEASON_WEEKS,6);
+  assert.equal(Math.round(((30 + DEFAULT_OFFSEASON_WEEKS) * DEVELOPMENT_GAIN_SCALE / 30) * 1000) / 10,115.2);
+  let offseason = beginOffseason();
+  for (let week = 1; week < DEFAULT_OFFSEASON_WEEKS; week += 1) offseason = advanceOffseasonWeek(offseason);
+  assert.equal(offseason.week,DEFAULT_OFFSEASON_WEEKS);
+  assert.equal(advanceOffseasonWeek(offseason),undefined);
+});
+
 test("contracts settle money, negotiate safely and loans return to parent club", async () => {
   const { createWorld } = await gameModule("/game/world.ts");
-  const { createMarketState, generateTransferOffers, negotiateOffer, acceptTransfer, prepareWeeklyDecision, resolveWeeklyDecision, resolveContractSeason, settleCareerWeek } = await gameModule("/game/career-market.ts");
+  const { createMarketState, generateTransferOffers, negotiateOffer, acceptTransfer, prepareWeeklyDecision, resolveWeeklyDecision, resolveContractSeason, settleCareerWeek, settleOffseasonWeek } = await gameModule("/game/career-market.ts");
   const world = createWorld(8080);
   let market = createMarketState("PL-3-01", 1, 58, 8080);
   market = settleCareerWeek(market, { season: 1, week: 1, appeared: true, goals: 2, rating: 8, won: true });
   assert.ok(market.ledger[0].amountEur > market.contract.weeklySalaryEur);
+  const breakSalary = settleOffseasonWeek(market,2,1);
+  assert.ok(breakSalary.amountEur >= market.contract.weeklySalaryEur);
+  assert.equal(breakSalary.market.ledger[0].id,"offseason-2-1");
   assert.equal(market.objectives.find((objective) => objective.id === "appearances").progress,1);
   for (let seed = 1; seed < 50 && !market.offers.length; seed += 1) market = generateTransferOffers(world, market, { season: 1, week: 15, age: 20, ovr: 58, potential: 84, form: 75, position: "Pomocnik", currentClubId: "PL-3-01" }, seed);
   assert.ok(market.offers.length > 0);
